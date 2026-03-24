@@ -9,11 +9,11 @@ import {
   UseGuards,
   Query,
 } from '@nestjs/common';
+import type { JwtPayload } from '../common/interfaces';
 import { EventsService } from './events.service';
 import { CreateEventDto, UpdateEventDto } from '../common/dtos';
 import { JwtGuard } from '../auth/guards/jwt.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
-import { JwtPayload } from '../common/interfaces';
 
 /**
  * Events Controller

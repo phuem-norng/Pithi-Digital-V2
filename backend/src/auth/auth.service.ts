@@ -84,6 +84,7 @@ export class AuthService {
     email: string,
     role: 'USER' | 'ADMIN',
   ) {
+    const secret = process.env.JWT_SECRET || 'fallback-secret-key-change-in-production';
     return this.jwtService.sign(
       {
         sub: userId,
@@ -91,8 +92,8 @@ export class AuthService {
         role,
       },
       {
-        secret: process.env.JWT_SECRET,
-        expiresIn: process.env.JWT_EXPIRATION || '7d',
+        secret,
+        expiresIn: '7d',
       },
     );
   }

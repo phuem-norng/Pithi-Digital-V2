@@ -14,9 +14,9 @@ import { UsersModule } from '../users/users.module';
   imports: [
     PassportModule,
     JwtModule.register({
-      secret: process.env.JWT_SECRET,
+      secret: process.env.JWT_SECRET || 'fallback-secret-key-change-in-production',
       signOptions: {
-        expiresIn: process.env.JWT_EXPIRATION || '7d',
+        expiresIn: '7d',
       },
     }),
     UsersModule,

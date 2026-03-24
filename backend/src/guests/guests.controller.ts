@@ -9,11 +9,11 @@ import {
   UseGuards,
   Query,
 } from '@nestjs/common';
+import type { JwtPayload } from '../common/interfaces';
 import { GuestsService } from './guests.service';
 import { CreateGuestDto, UpdateGuestStatusDto } from '../common/dtos';
 import { JwtGuard } from '../auth/guards/jwt.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
-import { JwtPayload } from '../common/interfaces';
 
 /**
  * Guests Controller
