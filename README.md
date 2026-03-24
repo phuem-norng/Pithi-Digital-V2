@@ -12,16 +12,16 @@ A modern, production-ready digital invitation platform for Cambodian users to cr
 
 ### Technology Stack
 
-| Layer | Technology |
-|-------|-----------|
-| **Frontend** | Next.js 16+ (App Router, TypeScript) |
-| **Backend** | NestJS (TypeScript, Clean Architecture) |
-| **Database** | PostgreSQL |
-| **ORM** | Prisma |
-| **Styling** | Tailwind CSS + shadcn/ui |
-| **Authentication** | JWT |
-| **Storage** | Cloudinary |
-| **Deployment** | Vercel (Frontend) / Railway (Backend) |
+| Layer              | Technology                              |
+| ------------------ | --------------------------------------- |
+| **Frontend**       | Next.js 16+ (App Router, TypeScript)    |
+| **Backend**        | NestJS (TypeScript, Clean Architecture) |
+| **Database**       | PostgreSQL                              |
+| **ORM**            | Prisma                                  |
+| **Styling**        | Tailwind CSS + shadcn/ui                |
+| **Authentication** | JWT                                     |
+| **Storage**        | Cloudinary                              |
+| **Deployment**     | Vercel (Frontend) / Railway (Backend)   |
 
 ---
 
@@ -121,6 +121,7 @@ npm run start:dev
 ## 📅 Development Roadmap
 
 ### ✅ PHASE 1: Project Initialization (COMPLETED)
+
 - [x] Create Next.js app with TypeScript and Tailwind CSS
 - [x] Setup shadcn/ui component library
 - [x] Create NestJS backend project
@@ -128,11 +129,13 @@ npm run start:dev
 - [x] Setup Git repository
 
 ### ⏳ PHASE 2: Database Design (NEXT)
+
 - [ ] Design Prisma schema
 - [ ] Create migrations
 - [ ] Setup database constraints and indexes
 
 ### 🔄 Subsequent Phases
+
 - PHASE 3: Backend Core (NestJS APIs)
 - PHASE 4: Frontend Core (Pages & Routing)
 - PHASE 5: Invitation System
