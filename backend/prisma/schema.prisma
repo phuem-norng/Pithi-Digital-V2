@@ -1,0 +1,141 @@
+// Prisma Schema for Pithi Digital
+// Event Invitation Platform
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/client"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ============================================
+// ENUMS
+// ============================================
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+enum EventType {
+  WEDDING
+  BIRTHDAY
+  CEREMONY
+  HOUSEWARMING
+  OTHER
+}
+
+enum GuestStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+}
+
+// ============================================
+// MODELS
+// ============================================
+
+/// User model - represents platform users
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  password  String
+  role      UserRole @default(USER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  events Event[]
+
+  @@map("users")
+  @@index([email])
+}
+
+/// Event model - represents event invitations
+model Event {
+  id          String    @id @default(cuid())
+  title       String
+  type        EventType
+  date        DateTime
+  location    String
+  description String?
+  coverImage  String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // Foreign Keys
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Relations
+  guests      Guest[]
+  invitations Invitation[]
+  templates   Template[]
+
+  @@map("events")
+  @@index([userId])
+  @@index([date])
+}
+
+/// Guest model - represents invited guests
+model Guest {
+  id        String      @id @default(cuid())
+  name      String
+  email     String?
+  phone     String?
+  status    GuestStatus @default(PENDING)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  // Foreign Keys
+  eventId String
+  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  // Relations
+  invitation Invitation?
+
+  @@map("guests")
+  @@index([eventId])
+  @@index([email])
+  @@unique([eventId, phone])
+}
+
+/// Invitation model - represents invitation links and QR codes
+model Invitation {
+  id        String   @id @default(cuid())
+  uniqueLink String  @unique
+  qrCode    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Foreign Keys
+  eventId String
+  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  guestId String @unique
+  guest   Guest  @relation(fields: [guestId], references: [id], onDelete: Cascade)
+
+  @@map("invitations")
+  @@index([eventId])
+  @@index([guestId])
+  @@index([uniqueLink])
+}
+
+/// Template model - represents event invitation templates
+model Template {
+  id        String   @id @default(cuid())
+  name      String
+  design    Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Foreign Keys
+  eventId String
+  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@map("templates")
+  @@index([eventId])
+}
