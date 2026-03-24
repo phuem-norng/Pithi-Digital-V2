@@ -6,10 +6,11 @@ import { PrismaClient } from '@prisma/client';
  * Handles database connection lifecycle management
  */
 @Injectable()
-export class PrismaService
-  extends PrismaClient
-  implements OnModuleInit, OnModuleDestroy
-{
+export class PrismaService extends PrismaClient<any, any> implements OnModuleInit, OnModuleDestroy {
+  constructor() {
+    super();
+  }
+
   async onModuleInit() {
     await this.$connect();
     console.log('✅ Database connected');
