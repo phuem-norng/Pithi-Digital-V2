@@ -384,7 +384,7 @@ export default function MyTemplatePreviewPage() {
       await apiClient.submitPublicRsvpBySlug(slug, {
         name: fallbackName,
         guestId: invitedGuestId || undefined,
-        rsvpStatus: rsvpChoice,
+        rsvpStatus: rsvpChoice || 'PENDING',
         greetingMessage: wishMessage.trim() || undefined,
         adultCount: rsvpChoice === 'CONFIRMED' ? adultCount || undefined : 0,
       });
