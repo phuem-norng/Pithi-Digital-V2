@@ -2329,15 +2329,9 @@ function EventDetailPage() {
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          {typeof guest.adultCount === 'number' && guest.adultCount > 0 && (guest.rsvpStatus === 'CONFIRMED' || guest.status === 'ACCEPTED') ? (
-                            <span className={`inline-flex rounded-full px-2.5 py-1 text-xs ${statusMeta.classes} whitespace-nowrap`}>
-                              {guest.adultCount} នាក់
-                            </span>
-                          ) : (
-                            <span className={`inline-flex rounded-full px-2.5 py-1 text-xs ${statusMeta.classes} whitespace-nowrap`}>
-                              {statusMeta.label}
-                            </span>
-                          )}
+                          <span className={`inline-flex rounded-full px-2.5 py-1 text-xs ${statusMeta.classes} whitespace-nowrap`}>
+                            {statusMeta.label}
+                          </span>
                         </td>
                         <td className="px-6 py-4 text-gray-700 whitespace-nowrap">{guest.greetingMessage}</td>
                         <td className="px-6 py-4 text-gray-700 whitespace-nowrap">{guest.note}</td>
