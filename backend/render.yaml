@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: pithi-digital-backend
+    runtime: node
+    rootDir: backend
+    buildCommand: npm install && npx prisma generate && npm run build
+    startCommand: npx prisma migrate deploy && node dist/main
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: JWT_EXPIRATION
+        value: 7d
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: CORS_ORIGIN
+        value: https://pithi-digital-v1.vercel.app
+      - key: APP_NAME
+        value: Pithi Digital
+      - key: APP_VERSION
+        value: 1.0.0
