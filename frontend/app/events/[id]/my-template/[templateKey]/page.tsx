@@ -259,7 +259,7 @@ export default function MyTemplatePreviewPage() {
             if (invitedGuest.rsvpStatus === 'DECLINED') {
               setRsvpChoice('DECLINED');
               setAdultCount(0);
-            } else if (invitedGuest.rsvpStatus === 'CONFIRMED' || invitedGuest.rsvpStatus === 'ACCEPTED') {
+            } else if (invitedGuest.rsvpStatus === 'CONFIRMED') {
               setRsvpChoice('CONFIRMED');
               setAdultCount(typeof invitedGuest.adultCount === 'number' && invitedGuest.adultCount > 0 ? invitedGuest.adultCount : 1);
             }
