@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
 
@@ -6,23 +7,49 @@ async function main() {
   console.log('🌱 Seeding database...');
 
   // Clear existing data
-  await prisma.invitation.deleteMany();
   await prisma.guest.deleteMany();
-  await prisma.template.deleteMany();
   await prisma.event.deleteMany();
+  await prisma.template.deleteMany();
+  await prisma.eventType.deleteMany();
   await prisma.user.deleteMany();
 
   // Create a test user
+  const defaultPassword = 'Pithi@123';
+  const hashedPassword = await bcrypt.hash(defaultPassword, 10);
   const user = await prisma.user.create({
     data: {
       email: 'test@pithidigital.com',
       name: 'Test User',
-      password: 'hashed_password_here', // In real app, use bcrypt
+      password: hashedPassword,
       role: 'ADMIN',
     },
   });
 
-  console.log(`✅ Created user: ${user.email}`);
+  console.log(`✅ Created user: ${user.email} (password: ${defaultPassword})`);
+
+  const eventType = await prisma.eventType.create({
+    data: {
+      name: 'Wedding',
+      slug: 'wedding',
+      description: 'Wedding ceremonies and receptions',
+    },
+  });
+
+  const template = await prisma.template.create({
+    data: {
+      name: 'Classic Wedding Template',
+      eventTypeId: eventType.id,
+      config: {
+        theme: 'classic',
+        colors: {
+          primary: '#d4af37',
+          secondary: '#ffffff',
+        },
+      },
+    },
+  });
+
+  console.log(`✅ Created template: ${template.name}`);
 
   // Create a test event
   const event = await prisma.event.create({
@@ -33,6 +60,8 @@ async function main() {
       location: 'Phnom Penh, Cambodia',
       description: 'A beautiful wedding celebration',
       userId: user.id,
+      eventTypeId: eventType.id,
+      templateId: template.id,
     },
   });
 
@@ -61,39 +90,6 @@ async function main() {
   ]);
 
   console.log(`✅ Created ${guests.length} guests`);
-
-  // Create invitations for guests
-  const invitations = await Promise.all(
-    guests.map((guest, index) =>
-      prisma.invitation.create({
-        data: {
-          uniqueLink: `invitation_${event.id}_${guest.id}_${Date.now()}`,
-          qrCode: `QR_${event.id}_${guest.id}`,
-          eventId: event.id,
-          guestId: guest.id,
-        },
-      }),
-    ),
-  );
-
-  console.log(`✅ Created ${invitations.length} invitations`);
-
-  // Create a template
-  const template = await prisma.template.create({
-    data: {
-      name: 'Classic Wedding Template',
-      design: {
-        theme: 'classic',
-        colors: {
-          primary: '#d4af37',
-          secondary: '#ffffff',
-        },
-      },
-      eventId: event.id,
-    },
-  });
-
-  console.log(`✅ Created template: ${template.name}`);
 
   console.log('✨ Seeding completed successfully!');
 }

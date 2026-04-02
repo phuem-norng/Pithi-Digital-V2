@@ -6,6 +6,8 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { LoginDto, CreateUserDto } from '../common/dtos';
 import { UsersService } from '../users/users.service';
+import { OAuth2Client } from 'google-auth-library';
+import { randomBytes } from 'crypto';
 
 /**
  * Auth Service
@@ -13,6 +15,8 @@ import { UsersService } from '../users/users.service';
  */
 @Injectable()
 export class AuthService {
+  private googleClient = new OAuth2Client();
+
   constructor(
     private usersService: UsersService,
     private jwtService: JwtService,
@@ -67,6 +71,55 @@ export class AuthService {
   }
 
   /**
+   * Login/register with Google ID token
+   */
+  async googleAuth(credential: string) {
+    const googleClientId = process.env.GOOGLE_CLIENT_ID;
+
+    if (!googleClientId) {
+      throw new BadRequestException('GOOGLE_CLIENT_ID is not configured');
+    }
+
+    const ticket = await this.googleClient.verifyIdToken({
+      idToken: credential,
+      audience: googleClientId,
+    });
+
+    const payload = ticket.getPayload();
+
+    if (!payload?.email || !payload?.name) {
+      throw new UnauthorizedException('Invalid Google token payload');
+    }
+
+    let user = await this.usersService.findByEmail(payload.email);
+
+    if (!user) {
+      const generatedPassword = randomBytes(24).toString('hex');
+      const createUserDto: CreateUserDto = {
+        email: payload.email,
+        name: payload.name,
+        password: generatedPassword,
+        phone: undefined,
+      };
+
+      await this.usersService.create(createUserDto);
+      user = await this.usersService.findByEmail(payload.email);
+    }
+
+    if (!user) {
+      throw new UnauthorizedException('Google authentication failed');
+    }
+
+    const token = this.generateToken(user.id, user.email, user.role);
+    const { password: _, ...userWithoutPassword } = user;
+
+    return {
+      user: userWithoutPassword,
+      access_token: token,
+    };
+  }
+
+  /**
    * Validate JWT token payload
    */
   validateToken(payload: any) {
@@ -82,7 +135,7 @@ export class AuthService {
   private generateToken(
     userId: string,
     email: string,
-    role: 'USER' | 'ADMIN',
+    role: 'CUSTOMER' | 'USER' | 'ADMIN',
   ) {
     const secret = process.env.JWT_SECRET || 'fallback-secret-key-change-in-production';
     return this.jwtService.sign(

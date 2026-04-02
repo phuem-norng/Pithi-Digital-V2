@@ -6,7 +6,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
-import { CreateUserDto, LoginDto } from '../common/dtos';
+import { CreateUserDto, GoogleAuthDto, LoginDto } from '../common/dtos';
 
 /**
  * Auth Controller
@@ -40,5 +40,15 @@ export class AuthController {
   @HttpCode(200)
   async login(@Body() loginDto: LoginDto) {
     return await this.authService.login(loginDto);
+  }
+
+  /**
+   * POST /api/auth/google
+   * Login/register with Google credential token
+   */
+  @Post('google')
+  @HttpCode(200)
+  async google(@Body() googleAuthDto: GoogleAuthDto) {
+    return await this.authService.googleAuth(googleAuthDto.credential);
   }
 }

@@ -55,6 +55,24 @@ export class EventsController {
   }
 
   /**
+   * GET /api/events/public/slug/:slug
+   * Get public event details by slug
+   */
+  @Get('public/slug/:slug')
+  async findPublicBySlug(@Param('slug') slug: string) {
+    return this.eventsService.findPublicBySlug(slug);
+  }
+
+  /**
+   * GET /api/events/public/:id
+   * Backward-compatible public event details by ID
+   */
+  @Get('public/:id')
+  async findPublicById(@Param('id') id: string) {
+    return this.eventsService.findPublicById(id);
+  }
+
+  /**
    * GET /api/events/:id
    * Get a single event by ID
    */

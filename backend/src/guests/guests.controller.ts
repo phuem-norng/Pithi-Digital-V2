@@ -8,10 +8,11 @@ import {
   Param,
   UseGuards,
   Query,
+  BadRequestException,
 } from '@nestjs/common';
 import type { JwtPayload } from '../common/interfaces';
 import { GuestsService } from './guests.service';
-import { CreateGuestDto, UpdateGuestStatusDto } from '../common/dtos';
+import { CreateGuestDto, UpdateGuestDto, UpdateGuestStatusDto } from '../common/dtos';
 import { JwtGuard } from '../auth/guards/jwt.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 
@@ -22,6 +23,18 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 @Controller('api/guests')
 export class GuestsController {
   constructor(private guestsService: GuestsService) {}
+
+  /**
+   * GET /api/guests/public/by-slug/:slug/:guestId
+   * Get a specific invited guest by event slug for locked public RSVP flow
+   */
+  @Get('public/by-slug/:slug/:guestId')
+  async findPublicGuestBySlug(
+    @Param('slug') slug: string,
+    @Param('guestId') guestId: string,
+  ) {
+    return this.guestsService.findPublicGuestBySlug(slug, guestId);
+  }
 
   /**
    * POST /api/guests/:eventId
@@ -78,6 +91,20 @@ export class GuestsController {
   }
 
   /**
+   * PUT /api/guests/:id
+   * Update guest details
+   */
+  @Put(':id')
+  @UseGuards(JwtGuard)
+  async update(
+    @Param('id') id: string,
+    @Body() updateGuestDto: UpdateGuestDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.guestsService.update(id, user.sub, updateGuestDto);
+  }
+
+  /**
    * DELETE /api/guests/:id
    * Remove a guest from an event
    */
@@ -91,11 +118,34 @@ export class GuestsController {
   }
 
   /**
-   * GET /api/guests/invitation/:uniqueLink
-   * Get guest by invitation link (public endpoint for RSVP page)
+   * POST /api/guests/public/rsvp/:slug
+   * Public RSVP submit by event slug
    */
-  @Get('invitation/:uniqueLink')
-  async findByInvitationLink(@Param('uniqueLink') uniqueLink: string) {
-    return this.guestsService.findByInvitationLink(uniqueLink);
+  @Post('public/rsvp/:slug')
+  async submitPublicRsvp(
+    @Param('slug') slug: string,
+    @Body()
+    payload: {
+      name: string;
+      phone?: string;
+      guestId?: string;
+      rsvpStatus: 'PENDING' | 'CONFIRMED' | 'DECLINED';
+      adultCount?: number;
+      childrenCount?: number;
+      greetingMessage?: string;
+    },
+  ) {
+    if (!payload?.name?.trim() && !payload?.guestId?.trim()) {
+      throw new BadRequestException('Name is required');
+    }
+
+    if (!payload?.rsvpStatus) {
+      throw new BadRequestException('RSVP status is required');
+    }
+
+    return this.guestsService.submitPublicRsvpBySlug(slug, {
+      ...payload,
+      name: payload.name?.trim() || '',
+    });
   }
 }

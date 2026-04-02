@@ -1,9 +1,5 @@
-// Prisma Schema for Pithi Digital
-// Event Invitation Platform
-
 generator client {
   provider = "prisma-client-js"
-  output   = "../node_modules/.prisma/client"
 }
 
 datasource db {
@@ -11,34 +7,6 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ============================================
-// ENUMS
-// ============================================
-
-enum UserRole {
-  USER
-  ADMIN
-}
-
-enum EventType {
-  WEDDING
-  BIRTHDAY
-  CEREMONY
-  HOUSEWARMING
-  OTHER
-}
-
-enum GuestStatus {
-  PENDING
-  ACCEPTED
-  DECLINED
-}
-
-// ============================================
-// MODELS
-// ============================================
-
-/// User model - represents platform users
 model User {
   id        String   @id @default(cuid())
   email     String   @unique
@@ -47,96 +15,208 @@ model User {
   role      UserRole @default(USER)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  avatarUrl String?
+  phone     String?
+  events    Event[]
 
-  // Relations
-  events Event[]
-
-  @@map("users")
   @@index([email])
+  @@map("users")
 }
 
-/// Event model - represents event invitations
-model Event {
-  id          String    @id @default(cuid())
-  title       String
-  type        EventType
-  date        DateTime
-  location    String
+model EventType {
+  id          String     @id @default(cuid())
+  name        String
+  slug        String     @unique
+  icon        String?
   description String?
-  coverImage  String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-
-  // Foreign Keys
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  // Relations
-  guests      Guest[]
-  invitations Invitation[]
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  events      Event[]
   templates   Template[]
 
-  @@map("events")
+  @@index([slug])
+  @@map("event_types")
+}
+
+model Template {
+  id          String    @id @default(cuid())
+  name        String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  config      Json?
+  eventTypeId String
+  previewUrl  String?
+  thumbnail   String?
+  events      Event[]
+  eventType   EventType @relation(fields: [eventTypeId], references: [id])
+
+  @@index([eventTypeId])
+  @@map("templates")
+}
+
+model Event {
+  id                   String              @id @default(cuid())
+  title                String
+  date                 DateTime
+  location             String
+  description          String?
+  coverImage           String?
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+  userId               String
+  address              String?
+  coordinates          Json?
+  eventTypeId          String?
+  googleMapLink        String?
+  guestCount           Int                 @default(0)
+  khqrDollar           String?
+  khqrRiel             String?
+  metadata             Json?
+  musicUrl             String?
+  slug                 String?             @unique
+  templateId           String?
+  type                 EventTypeEnum?
+  event_gallery_images EventGalleryImage[]
+  eventType            EventType?          @relation(fields: [eventTypeId], references: [id], onDelete: Restrict)
+  template             Template?           @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  user                 User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expenses             Expense[]
+  gifts                Gift[]
+  guests               Guest[]
+
   @@index([userId])
+  @@index([eventTypeId])
+  @@index([templateId])
+  @@index([slug])
   @@index([date])
+  @@map("events")
 }
 
-/// Guest model - represents invited guests
+model EventGalleryImage {
+  id            Int      @id @default(autoincrement())
+  event_id      String
+  image_url     String
+  display_order Int      @default(0)
+  created_at    DateTime @default(now())
+  updated_at    DateTime
+  events        Event    @relation(fields: [event_id], references: [id], onDelete: Cascade)
+
+  @@unique([event_id, image_url])
+  @@index([event_id])
+  @@map("event_gallery_images")
+}
+
 model Guest {
-  id        String      @id @default(cuid())
-  name      String
-  email     String?
-  phone     String?
-  status    GuestStatus @default(PENDING)
-  createdAt DateTime    @default(now())
-  updatedAt DateTime    @updatedAt
+  id              String            @id @default(cuid())
+  name            String
+  email           String?
+  phone           String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  eventId         String
+  adultCount      Int               @default(0)
+  childrenCount   Int               @default(0)
+  greetingMessage String?
+  group           String?           @default("GROOM_SIDE")
+  note            String?
+  rsvpStatus      RSVPStatus        @default(PENDING)
+  tableNumber     String?
+  tag             String?           @default("OTHERS")
+  status          InvitationStatus?
+  gifts           Gift[]
+  event           Event             @relation(fields: [eventId], references: [id], onDelete: Cascade)
 
-  // Foreign Keys
-  eventId String
-  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
-
-  // Relations
-  invitation Invitation?
-
-  @@map("guests")
   @@index([eventId])
-  @@index([email])
-  @@unique([eventId, phone])
+  @@index([rsvpStatus])
+  @@index([phone])
+  @@map("guests")
 }
 
-/// Invitation model - represents invitation links and QR codes
-model Invitation {
-  id        String   @id @default(cuid())
-  uniqueLink String  @unique
-  qrCode    String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+model Gift {
+  id           String           @id @default(cuid())
+  eventId      String
+  guestId      String
+  paymentType  GiftPaymentType
+  currencyType GiftCurrencyType
+  amount       Float
+  note         String?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  event        Event            @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  guest        Guest            @relation(fields: [guestId], references: [id], onDelete: Cascade)
 
-  // Foreign Keys
-  eventId String
-  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
-
-  guestId String @unique
-  guest   Guest  @relation(fields: [guestId], references: [id], onDelete: Cascade)
-
-  @@map("invitations")
+  @@unique([eventId, guestId])
   @@index([eventId])
   @@index([guestId])
-  @@index([uniqueLink])
+  @@map("gifts")
 }
 
-/// Template model - represents event invitation templates
-model Template {
-  id        String   @id @default(cuid())
+model Expense {
+  id        String           @id @default(cuid())
+  eventId   String
   name      String
-  design    Json?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  budget    Float
+  note      String?
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+  payments  ExpensePayment[]
+  event     Event            @relation(fields: [eventId], references: [id], onDelete: Cascade)
 
-  // Foreign Keys
-  eventId String
-  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
-
-  @@map("templates")
   @@index([eventId])
+  @@map("expenses")
+}
+
+model ExpensePayment {
+  id          String   @id @default(cuid())
+  expenseId   String
+  description String
+  amount      Float
+  note        String?
+  paidAt      DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  expense     Expense  @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+
+  @@index([expenseId])
+  @@index([paidAt])
+  @@map("expense_payments")
+}
+
+enum UserRole {
+  USER
+  ADMIN
+  CUSTOMER
+}
+
+enum EventTypeEnum {
+  WEDDING
+  BIRTHDAY
+  HOUSEWARMING
+  MEMORIAL
+  ENGAGEMENT
+  GRADUATION
+  BABY_SHOWER
+  OTHER
+}
+
+enum InvitationStatus {
+  PENDING
+  CONFIRMED
+  DECLINED
+}
+
+enum RSVPStatus {
+  PENDING
+  CONFIRMED
+  DECLINED
+}
+
+enum GiftPaymentType {
+  CASH
+  KHQR
+}
+
+enum GiftCurrencyType {
+  USD
+  KHR
 }

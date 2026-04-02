@@ -1,7 +1,14 @@
-import { Injectable, ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  ConflictException,
+  NotFoundException,
+  ForbiddenException,
+  UnauthorizedException,
+  BadRequestException,
+} from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
-import { CreateUserDto } from '../common/dtos';
+import { CreateUserDto, UpdateUserProfileDto } from '../common/dtos';
 
 const SALT_ROUNDS = 10;
 
@@ -17,7 +24,7 @@ export class UsersService {
    * Create a new user with hashed password
    */
   async create(createUserDto: CreateUserDto) {
-    const { email, password, name } = createUserDto;
+    const { email, password, name, phone } = createUserDto;
 
     // Check if user already exists
     const existingUser = await this.prisma.user.findUnique({
@@ -36,6 +43,7 @@ export class UsersService {
       data: {
         email,
         name,
+        phone,
         password: hashedPassword,
         role: 'USER',
       },
@@ -60,9 +68,6 @@ export class UsersService {
   async findById(id: string) {
     const user = await this.prisma.user.findUnique({
       where: { id },
-      include: {
-        events: true,
-      },
     });
 
     if (!user) {
@@ -79,12 +84,129 @@ export class UsersService {
     const users = await this.prisma.user.findMany({
       skip,
       take,
-      include: {
-        events: true,
-      },
     });
 
     return users.map((user) => this.sanitizeUser(user));
+  }
+
+  /**
+   * Ensure user is admin (DB truth, not JWT claim)
+   */
+  async assertIsAdmin(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true },
+    });
+
+    if (!user) {
+      throw new NotFoundException(`User with ID ${userId} not found`);
+    }
+
+    if (user.role !== 'ADMIN') {
+      throw new ForbiddenException('Admin access required');
+    }
+  }
+
+  /**
+   * Update current user profile
+   */
+  async updateProfile(userId: string, updateUserProfileDto: UpdateUserProfileDto) {
+    await this.findById(userId);
+
+    const user = await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        ...updateUserProfileDto,
+      },
+    });
+
+    return this.sanitizeUser(user);
+  }
+
+  /**
+   * Update user role (admin only)
+   */
+  async updateRole(userId: string, role: 'ADMIN' | 'USER') {
+    await this.findById(userId);
+
+    const user = await this.prisma.user.update({
+      where: { id: userId },
+      data: { role },
+    });
+
+    return this.sanitizeUser(user);
+  }
+
+  /**
+   * Change current user's password
+   */
+  async changePassword(
+    userId: string,
+    currentPassword: string,
+    newPassword: string,
+  ) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        password: true,
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException(`User with ID ${userId} not found`);
+    }
+
+    const isCurrentPasswordValid = await this.validatePassword(
+      currentPassword,
+      user.password,
+    );
+
+    if (!isCurrentPasswordValid) {
+      throw new UnauthorizedException('Current password is incorrect');
+    }
+
+    if (currentPassword === newPassword) {
+      throw new BadRequestException(
+        'New password must be different from current password',
+      );
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, SALT_ROUNDS);
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        password: hashedPassword,
+      },
+    });
+
+    return { message: 'Password updated successfully' };
+  }
+
+  /**
+   * Admin reset another user's password
+   */
+  async adminResetPassword(userId: string, newPassword: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true },
+    });
+
+    if (!user) {
+      throw new NotFoundException(`User with ID ${userId} not found`);
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, SALT_ROUNDS);
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        password: hashedPassword,
+      },
+    });
+
+    return { message: 'User password reset successfully' };
   }
 
   /**
