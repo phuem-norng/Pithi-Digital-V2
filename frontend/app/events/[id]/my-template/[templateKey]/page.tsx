@@ -274,7 +274,7 @@ export default function MyTemplatePreviewPage() {
                 setSentAt(Date.now());
               }
               setRsvpNotice('បានផ្ញើសារជូនពរ និងបច្ចុប្បន្នភាពស្ថានភាពរួចរាល់។');
-            } else if (invitedGuest.rsvpStatus === 'CONFIRMED' || invitedGuest.rsvpStatus === 'DECLINED' || invitedGuest.rsvpStatus === 'ACCEPTED') {
+            } else if (invitedGuest.rsvpStatus === 'CONFIRMED' || invitedGuest.rsvpStatus === 'DECLINED') {
               setRsvpNotice('បានផ្ញើបច្ចុប្បន្នភាពស្ថានភាពរួចរាល់។');
             }
 
