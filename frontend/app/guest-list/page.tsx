@@ -268,15 +268,9 @@ function GuestListPage() {
                         </span>
                       </td>
                       <td className="px-4 py-3">
-                        {typeof guest.adultCount === 'number' && guest.adultCount > 0 && (guest.rsvpStatus === 'CONFIRMED' || guest.status === 'ACCEPTED') ? (
-                          <span className={`inline-flex rounded-full px-2.5 py-1 text-xs ${statusMeta.className}`}>
-                            {guest.adultCount} នាក់
-                          </span>
-                        ) : (
-                          <span className={`inline-flex rounded-full px-2.5 py-1 text-xs ${statusMeta.className}`}>
-                            {statusMeta.label}
-                          </span>
-                        )}
+                        <span className={`inline-flex rounded-full px-2.5 py-1 text-xs ${statusMeta.className}`}>
+                          {statusMeta.label}
+                        </span>
                       </td>
                       <td className="px-4 py-3 text-gray-700">{guest.greetingMessage || '-'}</td>
                       <td className="px-4 py-3 text-gray-700">{guest.note || '-'}</td>
