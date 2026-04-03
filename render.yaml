@@ -1,9 +1,10 @@
 services:
   - type: web
     name: pithi-digital-backend
-    runtime: docker
-    dockerfilePath: ./backend/Dockerfile
-    dockerContext: ./backend
+    runtime: node
+    rootDir: backend
+    buildCommand: npm install --include=dev && npm run build
+    startCommand: ./node_modules/.bin/prisma migrate deploy && node dist/main
     envVars:
       - key: NODE_ENV
         value: production
