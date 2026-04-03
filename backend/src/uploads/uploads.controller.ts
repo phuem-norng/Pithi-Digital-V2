@@ -1,17 +1,24 @@
 import {
   BadRequestException,
   Controller,
+  InternalServerErrorException,
   Post,
-  Req,
   UploadedFile,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
-import { extname, join } from 'path';
-import { existsSync, mkdirSync } from 'fs';
+import { memoryStorage } from 'multer';
+import { extname } from 'path';
+import { createClient } from '@supabase/supabase-js';
 import { JwtGuard } from '../auth/guards/jwt.guard';
+
+function getSupabaseClient() {
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) throw new InternalServerErrorException('Supabase storage is not configured');
+  return createClient(url, key);
+}
 
 @Controller('api/uploads')
 export class UploadsController {
@@ -19,42 +26,43 @@ export class UploadsController {
   @UseGuards(JwtGuard)
   @UseInterceptors(
     FileInterceptor('file', {
-      storage: diskStorage({
-        destination: (_req, _file, callback) => {
-          const uploadDir = join(process.cwd(), 'uploads');
-          if (!existsSync(uploadDir)) {
-            mkdirSync(uploadDir, { recursive: true });
-          }
-          callback(null, uploadDir);
-        },
-        filename: (_req, file, callback) => {
-          const extension = extname(file.originalname);
-          const baseName = file.originalname
-            .replace(extension, '')
-            .toLowerCase()
-            .replace(/[^a-z0-9-_]/g, '-')
-            .replace(/-+/g, '-')
-            .replace(/^-|-$/g, '');
-
-          const safeName = baseName || 'upload-file';
-          callback(null, `${Date.now()}-${safeName}${extension}`);
-        },
-      }),
-      limits: {
-        fileSize: 10 * 1024 * 1024,
-      },
+      storage: memoryStorage(),
+      limits: { fileSize: 10 * 1024 * 1024 },
     }),
   )
-  uploadFile(@UploadedFile() file: any, @Req() req: any) {
+  async uploadFile(@UploadedFile() file: Express.Multer.File) {
     if (!file) {
       throw new BadRequestException('No file uploaded');
     }
 
-    const origin = `${req.protocol}://${req.get('host')}`;
+    const extension = extname(file.originalname).toLowerCase();
+    const baseName = file.originalname
+      .replace(extname(file.originalname), '')
+      .toLowerCase()
+      .replace(/[^a-z0-9-_]/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '') || 'upload';
+
+    const filename = `${Date.now()}-${baseName}${extension}`;
+
+    const supabase = getSupabaseClient();
+
+    const { error } = await supabase.storage
+      .from('uploads')
+      .upload(filename, file.buffer, {
+        contentType: file.mimetype,
+        upsert: false,
+      });
+
+    if (error) {
+      throw new InternalServerErrorException(`Upload failed: ${error.message}`);
+    }
+
+    const { data } = supabase.storage.from('uploads').getPublicUrl(filename);
 
     return {
-      filename: file.filename,
-      url: `${origin}/uploads/${file.filename}`,
+      filename,
+      url: data.publicUrl,
     };
   }
 }

@@ -60,6 +60,7 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || '';
   return (
     <html
       lang="en"
@@ -69,6 +70,21 @@ export default function RootLayout({
         <AuthProvider>
           {children}
         </AuthProvider>
+        {/* Keep Render backend awake so OG metadata fetches don't timeout */}
+        {apiUrl && (
+          <script
+            dangerouslySetInnerHTML={{
+              __html: `
+                (function(){
+                  var url = ${JSON.stringify(apiUrl + '/api/health')};
+                  function ping(){ fetch(url, {method:'GET',mode:'no-cors'}).catch(function(){}); }
+                  ping();
+                  setInterval(ping, 14 * 60 * 1000);
+                })();
+              `,
+            }}
+          />
+        )}
       </body>
     </html>
   );
