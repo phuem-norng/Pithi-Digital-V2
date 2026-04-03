@@ -5,10 +5,12 @@ interface Props {
   params: Promise<{ id: string }>;
 }
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://pithi-digital-v1.vercel.app';
+
 async function fetchEvent(id: string) {
   try {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-    const res = await fetch(`${apiUrl}/api/events/public/${id}`, {
+    const res = await fetch(`${API_URL}/api/events/public/${id}`, {
       next: { revalidate: 3600 },
     });
     if (!res.ok) return null;
@@ -18,11 +20,38 @@ async function fetchEvent(id: string) {
   }
 }
 
+/** Resolve cover image to an absolute URL Telegram/Facebook can crawl */
+function resolveImageUrl(coverImage?: string): string {
+  if (!coverImage) return `${APP_URL}/og-default.png`;
+  if (coverImage.startsWith('http://') || coverImage.startsWith('https://')) return coverImage;
+  return `${API_URL}${coverImage.startsWith('/') ? '' : '/'}${coverImage}`;
+}
+
+/** Extract couple names from metadata or event title */
+function buildOgTitle(event: { title?: string; metadata?: Record<string, unknown> }): string {
+  const meta = (event.metadata || {}) as Record<string, unknown>;
+  const groom = typeof meta.groomName === 'string' ? meta.groomName.trim() : '';
+  const bride = typeof meta.brideName === 'string' ? meta.brideName.trim() : '';
+
+  if (groom && bride) return `${groom} & ${bride} - Pithi Digital`;
+  if (groom || bride) return `${groom || bride} - Pithi Digital`;
+
+  const t = event.title || '';
+  if (t.includes(' និង ')) {
+    const [g, b] = t.split(' និង ').map((s) => s.trim());
+    if (g && b) return `${g} & ${b} - Pithi Digital`;
+  }
+  if (t.includes('&')) {
+    const [g, b] = t.split('&').map((s) => s.trim());
+    if (g && b) return `${g} & ${b} - Pithi Digital`;
+  }
+
+  return t ? `${t} - Pithi Digital` : 'លិខិតអញ្ជើញ | Pithi Digital';
+}
+
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
   const event = await fetchEvent(id);
-
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://pithi-digital-v1.vercel.app';
 
   if (!event) {
     return {
@@ -31,7 +60,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     };
   }
 
-  const title = event.title || 'លិខិតអញ្ជើញ';
+  const ogTitle = buildOgTitle(event);
   const date = event.date
     ? new Date(event.date).toLocaleDateString('km-KH', {
         year: 'numeric',
@@ -40,16 +69,16 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       })
     : '';
   const location = event.location || '';
-  const description = [date, location].filter(Boolean).join(' · ');
-  const image = event.coverImage || `${appUrl}/og-default.png`;
-  const url = `${appUrl}/invitation/${id}`;
+  const description = [date, location].filter(Boolean).join(' · ') || 'មើលលិខិតអញ្ជើញរបស់អ្នក';
+  const image = resolveImageUrl(event.coverImage);
+  const url = `${APP_URL}/invitation/${id}`;
 
   return {
-    title: `${title} | Pithi Digital`,
-    description: description || 'មើលលិខិតអញ្ជើញរបស់អ្នក',
+    title: ogTitle,
+    description,
     openGraph: {
-      title,
-      description: description || 'មើលលិខិតអញ្ជើញរបស់អ្នក',
+      title: ogTitle,
+      description,
       url,
       siteName: 'Pithi Digital',
       images: [
@@ -57,7 +86,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
           url: image,
           width: 1200,
           height: 630,
-          alt: title,
+          alt: ogTitle,
         },
       ],
       type: 'website',
@@ -65,8 +94,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     },
     twitter: {
       card: 'summary_large_image',
-      title,
-      description: description || 'មើលលិខិតអញ្ជើញរបស់អ្នក',
+      title: ogTitle,
+      description,
       images: [image],
     },
   };
