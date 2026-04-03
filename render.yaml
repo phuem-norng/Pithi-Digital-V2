@@ -4,7 +4,7 @@ services:
     runtime: node
     rootDir: backend
     buildCommand: npm install --include=dev && npm run build
-    startCommand: ./node_modules/.bin/prisma migrate deploy && node dist/main
+    startCommand: node dist/main
     envVars:
       - key: NODE_ENV
         value: production
