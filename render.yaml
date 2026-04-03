@@ -3,7 +3,7 @@ services:
     name: pithi-digital-backend
     runtime: node
     rootDir: backend
-    buildCommand: npm install --include=dev && npm run build
+    buildCommand: npm install --include=dev && ./node_modules/.bin/prisma generate && npm run build
     startCommand: node dist/main
     envVars:
       - key: NODE_ENV
