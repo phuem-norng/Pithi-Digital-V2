@@ -46,7 +46,7 @@ function hashSeed(seed: string) {
   return hash;
 }
 
-export function getSeededGalleryImages(seed: string, count = SAMPLE_GALLERY_IMAGES.length): string[] {
+export function getSeededGalleryImages(seed: string, count: number = SAMPLE_GALLERY_IMAGES.length): string[] {
   const list = [...SAMPLE_GALLERY_IMAGES];
   if (list.length === 0) {
     return [];

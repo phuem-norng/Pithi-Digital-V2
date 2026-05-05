@@ -96,7 +96,8 @@ type TabId =
   | 'edit'
   | 'schedule'
   | 'my-template'
-  | 'template-shop';
+  | 'template-shop'
+  | 'qr';
 
 type EditEventType = 'WEDDING' | 'CEREMONY' | 'BIRTHDAY' | 'HOUSEWARMING' | 'FUNERAL';
 
@@ -715,7 +716,7 @@ function EventDetailPage() {
       return;
     }
 
-    const handleOutsideClick = (event: MouseEvent) => {
+    const handleOutsideClick = (event: globalThis.MouseEvent) => {
       if (!expenseMenuRef.current) {
         return;
       }
@@ -807,7 +808,7 @@ function EventDetailPage() {
   }, [filePreviews]);
 
   useEffect(() => {
-    const handleOutsideClick = (event: MouseEvent) => {
+    const handleOutsideClick = (event: globalThis.MouseEvent) => {
       if (!isGiftGuestMenuOpen) {
         return;
       }
@@ -997,7 +998,7 @@ function EventDetailPage() {
       return;
     }
 
-    const handleOutsideClick = (event: MouseEvent) => {
+    const handleOutsideClick = (event: globalThis.MouseEvent) => {
       if (actionMenuRef.current && !actionMenuRef.current.contains(event.target as Node)) {
         setActionMenuGuestId(null);
       }

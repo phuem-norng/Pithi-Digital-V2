@@ -11,7 +11,7 @@ function localLanIpv4Hosts(): string[] {
   const hosts = new Set<string>();
   for (const entries of Object.values(nets)) {
     for (const e of entries ?? []) {
-      const v4 = e.family === 'IPv4' || e.family === 4;
+      const v4 = e.family === 'IPv4';
       if (v4 && !e.internal) hosts.add(e.address);
     }
   }

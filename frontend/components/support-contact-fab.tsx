@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { MessageCircle, Send, X } from 'lucide-react';
 import { apiClient, type SupportLink } from '@/lib/api-client';
 
-const platformStyles: Record<string, { bg: string; icon: JSX.Element }> = {
+const platformStyles: Record<string, { bg: string; icon: ReactNode }> = {
   telegram: { bg: 'bg-[#1D9BF0]', icon: <Send className="h-5 w-5" /> },
   facebook: { bg: 'bg-[#1877F2]', icon: <MessageCircle className="h-5 w-5" /> },
   messenger: { bg: 'bg-[#0084FF]', icon: <MessageCircle className="h-5 w-5" /> },
