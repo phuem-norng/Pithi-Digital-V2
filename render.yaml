@@ -3,8 +3,8 @@ services:
     name: pithi-digital-backend
     runtime: node
     rootDir: backend
-    buildCommand: npm install --include=dev && ./node_modules/.bin/prisma generate && npm run build
-    startCommand: node dist/main
+    buildCommand: npm install --include=dev && npx prisma generate && npm run build
+    startCommand: npm run start:prod
     envVars:
       - key: NODE_ENV
         value: production
@@ -19,7 +19,17 @@ services:
       - key: GOOGLE_CLIENT_ID
         sync: false
       - key: CORS_ORIGIN
-        value: https://pithi-digital-v1.vercel.app
+        sync: false
+      - key: CLOUDFLARE_ACCOUNT_ID
+        sync: false
+      - key: CLOUDFLARE_R2_ACCESS_KEY_ID
+        sync: false
+      - key: CLOUDFLARE_R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: CLOUDFLARE_R2_BUCKET_NAME
+        sync: false
+      - key: CLOUDFLARE_R2_PUBLIC_URL
+        sync: false
       - key: APP_NAME
         value: Pithi Digital
       - key: APP_VERSION
