@@ -4,5 +4,12 @@
     "@react-three/fiber": "^9.6.0",
     "canvas-confetti": "^1.9.4",
     "three": "^0.184.0"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7"
+  },
+  "scripts": {
+    "prepare": "husky",
+    "scan:secrets": "gitleaks git --pre-commit --staged --redact --verbose"
   }
 }
