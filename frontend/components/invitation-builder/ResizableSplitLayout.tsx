@@ -83,11 +83,11 @@ export default function ResizableSplitLayout({
       {/* Divider */}
       <div
         onMouseDown={() => setIsDragging(true)}
-        className="group relative w-1 cursor-col-resize select-none bg-gray-200 hover:bg-gray-300 transition-colors"
+        className="group relative w-1 cursor-col-resize select-none bg-gray-200 transition-colors hover:bg-gray-300 dark:bg-slate-700 dark:hover:bg-slate-600"
       >
         {/* Handle Icon */}
         <div className="absolute inset-y-0 -left-3 -right-3 flex items-center justify-center">
-          <div className="flex flex-col items-center justify-center rounded-md bg-gray-300 px-2 py-1 opacity-0 group-hover:opacity-100 transition-opacity shadow-sm">
+          <div className="flex flex-col items-center justify-center rounded-md bg-gray-300 px-2 py-1 opacity-0 transition-opacity shadow-sm group-hover:opacity-100 dark:bg-slate-600">
             {/* 6-dot drag pattern */}
             <div className="flex gap-1">
               <div className="h-1 w-1 rounded-full bg-white"></div>

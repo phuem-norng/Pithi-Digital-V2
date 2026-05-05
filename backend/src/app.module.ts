@@ -11,6 +11,8 @@ import { UploadsModule } from './uploads/uploads.module';
 import { EventTypesModule } from './event-types/event-types.module';
 import { TemplatesModule } from './templates/templates.module';
 import { ExpensesModule } from './expenses/expenses.module';
+import { MusicModule } from './music/music.module';
+import { SupportLinksModule } from './support-links/support-links.module';
 
 @Module({
   imports: [
@@ -24,6 +26,8 @@ import { ExpensesModule } from './expenses/expenses.module';
     EventTypesModule,
     TemplatesModule,
     ExpensesModule,
+    MusicModule,
+    SupportLinksModule,
   ],
   controllers: [AppController],
   providers: [AppService],

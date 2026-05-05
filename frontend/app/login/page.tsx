@@ -76,21 +76,21 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-linear-to-br from-purple-50 to-blue-50 px-4">
+    <div className="min-h-screen flex items-center justify-center bg-linear-to-br from-purple-50 to-blue-50 px-4 dark:from-slate-950 dark:to-slate-900">
       <div className="w-full max-w-md">
-        <div className="bg-white rounded-lg shadow-lg p-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Pithi Digital</h1>
-          <p className="text-gray-600 mb-8">Send beautiful digital invitations</p>
+        <div className="rounded-lg bg-white p-8 shadow-lg dark:border dark:border-slate-800 dark:bg-slate-900">
+          <h1 className="mb-2 text-3xl font-bold text-gray-900 dark:text-slate-100">Pithi Digital</h1>
+          <p className="mb-8 text-gray-600 dark:text-slate-400">Send beautiful digital invitations</p>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
-              <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+              <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300">
                 {error}
               </div>
             )}
 
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="email" className="mb-2 block text-sm font-medium text-gray-700 dark:text-slate-300">
                 Email Address
               </label>
               <Input
@@ -104,7 +104,7 @@ export default function LoginPage() {
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="password" className="mb-2 block text-sm font-medium text-gray-700 dark:text-slate-300">
                 Password
               </label>
               <Input
@@ -123,9 +123,9 @@ export default function LoginPage() {
           </form>
 
           <div className="my-4 flex items-center gap-3">
-            <div className="h-px flex-1 bg-gray-200" />
-            <span className="text-xs uppercase tracking-wide text-gray-500">or</span>
-            <div className="h-px flex-1 bg-gray-200" />
+            <div className="h-px flex-1 bg-gray-200 dark:bg-slate-700" />
+            <span className="text-xs uppercase tracking-wide text-gray-500 dark:text-slate-400">or</span>
+            <div className="h-px flex-1 bg-gray-200 dark:bg-slate-700" />
           </div>
 
           <GoogleSignInButton
@@ -134,10 +134,10 @@ export default function LoginPage() {
             text="Sign in with Google"
           />
 
-          <div className="mt-6 pt-6 border-t">
-            <p className="text-center text-gray-600 text-sm">
+          <div className="mt-6 border-t pt-6 dark:border-slate-700">
+            <p className="text-center text-sm text-gray-600 dark:text-slate-400">
               Don't have an account?{' '}
-              <Link href="/register" className="text-blue-600 hover:text-blue-700 font-medium">
+              <Link href="/register" className="font-medium text-blue-600 hover:text-blue-700 dark:text-sky-400 dark:hover:text-sky-300">
                 Create one
               </Link>
             </p>

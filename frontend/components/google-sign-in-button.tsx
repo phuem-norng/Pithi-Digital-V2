@@ -11,8 +11,13 @@ declare global {
           initialize: (options: {
             client_id: string;
             callback: (response: { credential: string }) => void;
+            use_fedcm_for_prompt?: boolean;
           }) => void;
-          prompt: () => void;
+          prompt: (callback?: (notification: {
+            isNotDisplayed: () => boolean;
+            isSkippedMoment: () => boolean;
+            isDismissedMoment: () => boolean;
+          }) => void) => void;
         };
       };
     };
@@ -70,6 +75,7 @@ export function GoogleSignInButton({
 
     window.google.accounts.id.initialize({
       client_id: clientId,
+      use_fedcm_for_prompt: false,
       callback: async (response) => {
         setIsSubmitting(true);
         try {
@@ -80,7 +86,15 @@ export function GoogleSignInButton({
       },
     });
 
-    window.google.accounts.id.prompt();
+    window.google.accounts.id.prompt((notification) => {
+      if (
+        notification.isNotDisplayed() ||
+        notification.isSkippedMoment() ||
+        notification.isDismissedMoment()
+      ) {
+        // FedCM was dismissed or not shown — not an error, safe to ignore
+      }
+    });
   };
 
   return (

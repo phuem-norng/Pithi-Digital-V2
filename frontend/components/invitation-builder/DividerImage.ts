@@ -1,2 +1,2 @@
-// This file exports the decorative divider image for use in InvitationCard
-export const DividerImage = '/decorative-divider.png';
+import { Assets } from '@/lib/assets';
+export const DividerImage = Assets.decorativeDivider;

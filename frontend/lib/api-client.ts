@@ -1,13 +1,44 @@
 import axios, { AxiosInstance } from 'axios';
 
 function getApiBaseUrl() {
-  if (process.env.NEXT_PUBLIC_API_URL) {
-    return process.env.NEXT_PUBLIC_API_URL;
+  const envApiUrl = process.env.NEXT_PUBLIC_API_URL;
+
+  if (envApiUrl) {
+    // If frontend is opened from another host/device during local dev, a hardcoded
+    // localhost API URL points to the wrong machine. Rewrite host to current host.
+    if (typeof window !== 'undefined') {
+      try {
+        const parsed = new URL(envApiUrl);
+        const isLocalHost =
+          parsed.hostname === 'localhost' ||
+          parsed.hostname === '127.0.0.1' ||
+          parsed.hostname === '0.0.0.0' ||
+          parsed.hostname === '[::]';
+        const currentHost = window.location.hostname;
+        const currentIsLocal =
+          currentHost === 'localhost' ||
+          currentHost === '127.0.0.1' ||
+          currentHost === '0.0.0.0' ||
+          currentHost === '[::]';
+
+        if (isLocalHost && !currentIsLocal) {
+          parsed.protocol = window.location.protocol;
+          parsed.hostname = currentHost;
+          return parsed.toString().replace(/\/$/, '');
+        }
+      } catch {
+        // Fall through to the configured value if parsing fails.
+      }
+    }
+
+    return envApiUrl;
   }
 
   // Keep local dev working for both localhost and LAN device testing.
   if (typeof window !== 'undefined') {
-    return `${window.location.protocol}//${window.location.hostname}:3001`;
+    const hostname = window.location.hostname;
+    const resolvedHost = hostname === '0.0.0.0' || hostname === '[::]' ? 'localhost' : hostname;
+    return `${window.location.protocol}//${resolvedHost}:3001`;
   }
 
   return 'http://localhost:3001';
@@ -65,6 +96,7 @@ interface Guest {
   note?: string;
   status: 'PENDING' | 'ACCEPTED' | 'DECLINED';
   rsvpStatus?: 'PENDING' | 'CONFIRMED' | 'DECLINED';
+  adultCount?: number;
   eventId: string;
   createdAt: string;
   updatedAt: string;
@@ -81,6 +113,7 @@ interface EventType {
 interface Template {
   id: string;
   name: string;
+  // Catalog-owned template assets. Builder edits should stay in builder state/snapshots.
   thumbnail?: string;
   previewUrl?: string;
   eventTypeId: string;
@@ -133,6 +166,25 @@ interface Expense {
   createdAt: string;
   updatedAt: string;
   payments: ExpensePayment[];
+}
+
+interface MusicTrack {
+  id: string;
+  name: string;
+  url: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface SupportLink {
+  id: string;
+  label: string;
+  url: string;
+  platform?: string | null;
+  isActive: boolean;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface EventsResponse {
@@ -523,6 +575,66 @@ class APIClient {
     return data;
   }
 
+  // Music endpoints
+  async getMusic(): Promise<MusicTrack[]> {
+    const { data } = await this.client.get('/api/music');
+    return Array.isArray(data) ? data : [];
+  }
+
+  async createMusic(name: string, url: string): Promise<MusicTrack> {
+    const { data } = await this.client.post('/api/music', { name, url });
+    return data;
+  }
+
+  async updateMusic(id: string, updates: { name?: string; url?: string }): Promise<MusicTrack> {
+    const { data } = await this.client.patch(`/api/music/${id}`, updates);
+    return data;
+  }
+
+  async deleteMusic(id: string): Promise<void> {
+    await this.client.delete(`/api/music/${id}`);
+  }
+
+  // Support links endpoints
+  async getPublicSupportLinks(): Promise<SupportLink[]> {
+    const { data } = await this.client.get('/api/support-links');
+    return Array.isArray(data) ? data : [];
+  }
+
+  async getSupportLinks(): Promise<SupportLink[]> {
+    const { data } = await this.client.get('/api/support-links/admin');
+    return Array.isArray(data) ? data : [];
+  }
+
+  async createSupportLink(payload: {
+    label: string;
+    url: string;
+    platform?: string;
+    isActive?: boolean;
+    sortOrder?: number;
+  }): Promise<SupportLink> {
+    const { data } = await this.client.post('/api/support-links', payload);
+    return data;
+  }
+
+  async updateSupportLink(
+    id: string,
+    updates: {
+      label?: string;
+      url?: string;
+      platform?: string | null;
+      isActive?: boolean;
+      sortOrder?: number;
+    },
+  ): Promise<SupportLink> {
+    const { data } = await this.client.patch(`/api/support-links/${id}`, updates);
+    return data;
+  }
+
+  async deleteSupportLink(id: string): Promise<void> {
+    await this.client.delete(`/api/support-links/${id}`);
+  }
+
   async getPublicGuestBySlug(
     slug: string,
     guestId: string,
@@ -551,4 +663,4 @@ class APIClient {
 }
 
 export const apiClient = new APIClient();
-export type { AuthTokens, User, Event, Guest, Gift, Expense, ExpensePayment, EventStats, UserRole, EventType, Template };
+export type { AuthTokens, User, Event, Guest, Gift, Expense, ExpensePayment, EventStats, UserRole, EventType, Template, MusicTrack, SupportLink };

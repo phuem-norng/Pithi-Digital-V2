@@ -105,7 +105,7 @@ function GuestListPage() {
   const setPage = (nextPage: number) => {
     const params = new URLSearchParams(searchParams.toString());
     params.set('page', String(nextPage));
-    router.push(`/guest-list?${params.toString()}`);
+    router.replace(`/guest-list?${params.toString()}`, { scroll: false });
   };
 
   const getStatusBadge = (status: string | undefined) => {

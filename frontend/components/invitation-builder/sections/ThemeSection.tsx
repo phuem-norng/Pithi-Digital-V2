@@ -7,14 +7,16 @@ import type { BuilderState } from '../types';
 type ThemeSectionProps = {
   textColor: string;
   headingColor: string;
+  lang: 'km' | 'en';
   onChange: (updates: Partial<BuilderState>) => void;
 };
 
-export default function ThemeSection({ textColor, headingColor, onChange }: ThemeSectionProps) {
+export default function ThemeSection({ textColor, headingColor, lang, onChange }: ThemeSectionProps) {
+  const isKm = lang === 'km';
   return (
     <div className="grid gap-4 md:grid-cols-2">
       <div className="space-y-2">
-        <Label>ពណ៌អក្សរខាងមុខ(ក្របcover)</Label>
+        <Label>{isKm ? 'ពណ៌អក្សរខាងមុខ (Cover)' : 'Cover text color'}</Label>
         <div className="flex items-center gap-2">
           <Input
             type="color"
@@ -26,7 +28,7 @@ export default function ThemeSection({ textColor, headingColor, onChange }: Them
         </div>
       </div>
       <div className="space-y-2">
-        <Label>ពណ៌អក្សរខាងក្រោម</Label>
+        <Label>{isKm ? 'ពណ៌អក្សរខាងក្រោម' : 'Body text color'}</Label>
         <div className="flex items-center gap-2">
           <Input
             type="color"

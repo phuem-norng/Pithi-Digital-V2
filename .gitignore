@@ -13,7 +13,7 @@ node_modules/
 # Next.js
 .next/
 out/
->/dist/
+/dist/
 
 # NestJS
 dist/

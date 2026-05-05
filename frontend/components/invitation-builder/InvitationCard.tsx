@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { Assets } from '@/lib/assets';
 import {
   Home,
   CalendarDays,
@@ -195,6 +196,7 @@ export default function InvitationCard({
   isMusicPlaying = false,
   onToggleMusic,
 }: InvitationCardProps) {
+  const isFloralRoseStyle = data.styleVariant === 'floral-rose';
   const [now, setNow] = useState(Date.now());
   const [activeGalleryIndex, setActiveGalleryIndex] = useState<number | null>(null);
   const [isSlideshowPlaying, setIsSlideshowPlaying] = useState(false);
@@ -347,7 +349,9 @@ export default function InvitationCard({
 
   return (
     <div 
-      className="overflow-hidden rounded-[28px] bg-white font-khmer-body shadow-[0_24px_60px_rgba(0,0,0,0.18)] sm:rounded-[32px]"
+      className={`overflow-hidden rounded-[28px] font-khmer-body shadow-[0_24px_60px_rgba(0,0,0,0.18)] sm:rounded-[32px] ${
+        isFloralRoseStyle ? 'bg-[#efefef]' : 'bg-white'
+      }`}
       style={{
         backgroundImage: data.backgroundUrl ? `url(${data.backgroundUrl})` : undefined,
         backgroundSize: 'cover',
@@ -357,8 +361,8 @@ export default function InvitationCard({
     >
       <ImageCover data={data} />
 
-      <section className="space-y-4 px-3 py-4 pb-32 sm:space-y-6 sm:px-5 sm:py-6" style={{ color: data.headingColor }}>
-        <div id="invitation-top" className="p-2 text-center sm:p-4">
+      <section className={`space-y-4 px-3 py-4 pb-32 sm:space-y-6 sm:px-5 sm:py-6 ${isFloralRoseStyle ? 'space-y-0 px-0 py-0 pb-24' : ''}`} style={{ color: data.headingColor }}>
+        <div id="invitation-top" className={`p-2 text-center sm:p-4 ${isFloralRoseStyle ? 'bg-[#eecfaf] px-4 py-5 sm:px-6 sm:py-6' : ''}`}>
           <p className="font-khmer-heading text-base text-current">
             {data.language === 'en' ? 'Days Remaining' : 'ចំនួនថ្ងៃដែលនៅសល់'}
           </p>
@@ -383,7 +387,7 @@ export default function InvitationCard({
           )}
         </div>
 
-        <div id="invitation-greeting" className="p-4 text-center">
+        <div id="invitation-greeting" className={`p-4 text-center ${isFloralRoseStyle ? 'bg-[#f5f5f5] px-4 py-6 sm:px-6 sm:py-7' : ''}`}>
           <h2 className="text-2xl font-bold text-current mb-2">
             {data.greetingTitle}
           </h2>
@@ -391,11 +395,11 @@ export default function InvitationCard({
             {data.greetingMessage}
           </p>
           <div className="flex justify-center my-4">
-            <img src="/decorative-divider.png" alt="divider" className="h-6" />
+            <img src={Assets.decorativeDivider} alt="divider" className="h-6" />
           </div>
         </div>
 
-        <div id="invitation-agenda" className="p-4 text-center">
+        <div id="invitation-agenda" className={`p-4 text-center ${isFloralRoseStyle ? 'bg-[#eecfaf] px-4 py-6 sm:px-6 sm:py-7' : ''}`}>
           <p className="text-xl font-semibold text-current mb-4">
             {data.language === 'en' ? 'Agenda' : 'របៀបវារៈកម្មវិធី'}
           </p>
@@ -406,13 +410,13 @@ export default function InvitationCard({
                 className={sectionIndex > 0 ? 'border-t border-[#ead8bf] pt-5' : ''}
               >
                 <p className="text-base font-bold text-current mb-3 text-center">
-                  {section.title || 'របៀបវារៈ'}
+                  {section.title || (data.language === 'en' ? 'Agenda' : 'របៀបវារៈ')}
                 </p>
                 <div className="space-y-3">
                   {section.items.map((item) => (
                     <div key={item.id} className="flex flex-col items-center justify-center gap-1 py-1">
                       <span className="text-base font-semibold text-current text-center">
-                        {item.title || 'ឈ្មោះកម្មវិធី'}
+                        {item.title || (data.language === 'en' ? 'Program item' : 'ឈ្មោះកម្មវិធី')}
                       </span>
                       <div className="flex items-center justify-center gap-3 text-xs text-current">
                         <span>{item.date || '--/--/----'}</span>
@@ -427,7 +431,7 @@ export default function InvitationCard({
           </div>
         </div>
 
-        <div id="invitation-location" className="p-4 text-center">
+        <div id="invitation-location" className={`p-4 text-center ${isFloralRoseStyle ? 'bg-[#f5f5f5] px-4 py-6 sm:px-6 sm:py-7' : ''}`}>
           <div className="flex flex-col items-center justify-center gap-2 mb-4">
             <p className="text-xl font-semibold text-current">
               {data.language === 'en' ? 'Event Location' : 'ទីតាំងកម្មវិធី'}
@@ -439,7 +443,7 @@ export default function InvitationCard({
                 rel="noreferrer"
                 className="text-sm font-semibold text-current underline"
               >
-                Open Google Map
+                {data.language === 'en' ? 'Open Google Maps' : 'បើក Google Maps'}
               </a>
             ) : null}
           </div>
@@ -460,7 +464,7 @@ export default function InvitationCard({
         </div>
 
         {data.galleryImages && data.galleryImages.length > 0 && (
-          <div id="invitation-gallery" className="p-4 text-center">
+          <div id="invitation-gallery" className={`p-4 text-center ${isFloralRoseStyle ? 'bg-[#eecfaf] px-4 py-6 sm:px-6 sm:py-7' : ''}`}>
             <p className="text-xl font-semibold text-current mb-4">
               {data.language === 'en' ? 'Gallery' : 'វិចិត្រសាល'}
             </p>
@@ -495,16 +499,16 @@ export default function InvitationCard({
         )}
 
         {(data.thankYouTitle || data.thankYouMessage) && (
-          <div id="invitation-thanks" className="p-6 text-center">
+          <div id="invitation-thanks" className={`p-6 text-center ${isFloralRoseStyle ? 'bg-[#f5f5f5] px-4 py-6 sm:px-6 sm:py-7' : ''}`}>
             <div className="flex justify-center mb-4">
-              <img src="/decorative-divider.png" alt="divider" className="h-6" />
+              <img src={Assets.decorativeDivider} alt="divider" className="h-6" />
             </div>
             {data.thankYouTitle && <p className="text-xl font-semibold text-current mb-4">{data.thankYouTitle}</p>}
             {data.thankYouMessage && <p className="text-md text-current leading-relaxed whitespace-pre-wrap">{data.thankYouMessage}</p>}
           </div>
         )}
 
-        <div id="invitation-khqr" className="p-4 text-center">
+        <div id="invitation-khqr" className={`p-4 text-center ${isFloralRoseStyle ? 'bg-[#eecfaf] px-4 py-6 sm:px-6 sm:py-7' : ''}`}>
           <p className="text-xl font-semibold text-current mb-4">
             {data.language === 'en' ? 'Gift KHQR' : 'ចងដៃតាមរយៈ KHQR'}
           </p>
@@ -523,11 +527,11 @@ export default function InvitationCard({
             </div>
           </div>
           <div className="flex justify-center mt-4">
-            <img src="/decorative-divider.png" alt="divider" className="h-6" />
+            <img src={Assets.decorativeDivider} alt="divider" className="h-6" />
           </div>
         </div>
 
-        <div id="invitation-rsvp" className="p-4 text-center">
+        <div id="invitation-rsvp" className={`p-4 text-center ${isFloralRoseStyle ? 'bg-[#f5f5f5] px-4 py-6 sm:px-6 sm:py-7' : ''}`}>
           {showInvitationRsvp ? (
             <section
               className="relative overflow-hidden rounded-[28px] border border-[#ebd9b8] bg-[#fff8ef] p-5 shadow-[0_14px_30px_rgba(95,63,35,0.12)]"
@@ -537,7 +541,9 @@ export default function InvitationCard({
                 backgroundSize: '120px 120px, 140px 140px, 160px 160px, auto',
               }}
             >
-              <h3 className="text-center font-khmer-heading text-xl text-[#7d1833]">សារជូនពរ</h3>
+              <h3 className="text-center font-khmer-heading text-xl text-[#7d1833]">
+                {data.language === 'en' ? 'Wishes' : 'សារជូនពរ'}
+              </h3>
 
               <div className="mt-4 grid grid-cols-2 gap-3">
                 <button
@@ -549,7 +555,7 @@ export default function InvitationCard({
                       : 'border-gray-300 bg-white text-gray-600 hover:bg-gray-50'
                   }`}
                 >
-                  ✓  មកចូលរួម
+                  {data.language === 'en' ? '✓  Attending' : '✓  មកចូលរួម'}
                 </button>
                 <button
                   type="button"
@@ -560,7 +566,7 @@ export default function InvitationCard({
                       : 'border-gray-300 bg-white text-gray-600 hover:bg-gray-50'
                   }`}
                 >
-                  ✗  មិនបានចូលរួម
+                  {data.language === 'en' ? '✗  Cannot attend' : '✗  មិនបានចូលរួម'}
                 </button>
               </div>
 
@@ -569,12 +575,16 @@ export default function InvitationCard({
               {rsvpChoice === 'CONFIRMED' ? (
                 <>
                   <div className="mt-3 flex items-center justify-center gap-3 text-sm text-[#6f4b2d]">
-                    <span className="font-medium">បញ្ជាក់ពីវត្តមានអ្នក</span>
-                    <span className="px-2 py-1 rounded-full bg-white/80 text-[#4f3621]">{adultCount} នាក់</span>
+                    <span className="font-medium">
+                      {data.language === 'en' ? 'Confirm your attendance' : 'បញ្ជាក់ពីវត្តមានអ្នក'}
+                    </span>
+                    <span className="px-2 py-1 rounded-full bg-white/80 text-[#4f3621]">
+                      {adultCount} {data.language === 'en' ? 'people' : 'នាក់'}
+                    </span>
                   </div>
                   <div className="mt-3 flex items-center justify-center gap-4">
                     <div className="flex flex-col items-center">
-                      <div className="text-xs text-gray-600">ចំនួននាក់</div>
+                      <div className="text-xs text-gray-600">{data.language === 'en' ? 'Number of people' : 'ចំនួននាក់'}</div>
                       <div className="mt-1 flex items-center gap-2">
                         <button
                           type="button"
@@ -602,7 +612,7 @@ export default function InvitationCard({
                   value={wishMessage || sentWish || ''}
                   onChange={(event) => onWishMessageChange?.(event.target.value)}
                   rows={4}
-                  placeholder="សូមសរសេរសារជូនពររបស់អ្នក..."
+                  placeholder={data.language === 'en' ? 'Please write your message...' : 'សូមសរសេរសារជូនពររបស់អ្នក...'}
                   className="w-full resize-none rounded-2xl border border-[#ead8bf] bg-white/90 px-4 py-3 text-sm text-[#4f3621] outline-none transition focus:border-[#caa260] focus:ring-2 focus:ring-[#efd7ad]"
                 />
               </div>
@@ -615,11 +625,11 @@ export default function InvitationCard({
                   className="inline-flex h-11 items-center justify-center rounded-full border border-[#c0923f] bg-linear-to-r from-[#f6deb0] via-[#efc777] to-[#e7b45a] px-7 text-sm font-semibold text-[#6f3b00] shadow-[0_10px_22px_rgba(170,115,18,0.25)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {isSubmittingRsvp ? (
-                    'កំពុងផ្ញើ...'
+                    data.language === 'en' ? 'Sending...' : 'កំពុងផ្ញើ...'
                   ) : (
                     <>
                       <Mail className="mr-2 h-4 w-4" />
-                      ផ្ញើសារ
+                      {data.language === 'en' ? 'Send message' : 'ផ្ញើសារ'}
                     </>
                   )}
                 </button>
@@ -633,7 +643,7 @@ export default function InvitationCard({
                 <div className="mt-4 rounded-2xl border border-[#ead8bf] bg-white p-3 text-left shadow-sm">
                   <div className="flex items-center justify-between">
                     <div className="text-sm font-semibold text-[#3b2a1a]">
-                      {rsvpSenderName || 'អ្នក'}
+                      {rsvpSenderName || (data.language === 'en' ? 'Guest' : 'អ្នក')}
                     </div>
                     <div className="text-xs text-gray-500">{sentAt ? new Date(sentAt).toLocaleString() : ''}</div>
                   </div>
@@ -643,8 +653,8 @@ export default function InvitationCard({
             </section>
           ) : (
             <>
-              <p className="text-xl font-semibold text-current">សារជូនពរ</p>
-              <p className="mt-2 text-sm text-current">មិនទាន់មានសារជូនពរ</p>
+              <p className="text-xl font-semibold text-current">{data.language === 'en' ? 'Wishes' : 'សារជូនពរ'}</p>
+              <p className="mt-2 text-sm text-current">{data.language === 'en' ? 'No message yet' : 'មិនទាន់មានសារជូនពរ'}</p>
             </>
           )}
         </div>
@@ -674,7 +684,11 @@ export default function InvitationCard({
               type="button"
               onClick={onToggleMusic}
               className="flex h-10 w-10 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm shadow-sm text-pink-500"
-              aria-label={isMusicPlaying ? 'Pause music' : 'Play music'}
+              aria-label={
+                isMusicPlaying
+                  ? (data.language === 'en' ? 'Pause music' : 'ផ្អាកតន្ត្រី')
+                  : (data.language === 'en' ? 'Play music' : 'ចាក់តន្ត្រី')
+              }
             >
               {isMusicPlaying ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
             </button>

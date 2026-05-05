@@ -1,30 +1,32 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type KeyboardEvent } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   Calendar,
   CheckCircle2,
   Globe,
   Home,
-  ListChecks,
   MapPin,
   Menu,
   PartyPopper,
   Plus,
   Upload,
   User,
-  UserCircle,
   Users,
   X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { apiClient, EventType as ApiEventType, Template } from '@/lib/api-client';
+import { MessageCard } from '@/components/ui/message-card';
+import { apiClient, EventType as ApiEventType } from '@/lib/api-client';
 import { EVENT_CATEGORY_BY_KEY, EVENT_CATEGORY_OPTIONS, EventFlowType } from '@/lib/event-categories';
 import { withProtectedRoute } from '@/lib/protected-route';
 import { useAuth } from '@/lib/auth-context';
+import { useLanguage } from '@/lib/language-context';
+import { DashboardLanguageThemeControls } from '@/components/dashboard-language-theme-controls';
+import { DashboardSharedSidebar } from '@/components/dashboard-shared-sidebar';
 
 const EVENT_TYPE_OPTIONS: Array<{ value: EventFlowType; label: string }> = [
   { value: 'WEDDING', label: 'មង្គលការ' },
@@ -33,20 +35,43 @@ const EVENT_TYPE_OPTIONS: Array<{ value: EventFlowType; label: string }> = [
   { value: 'HOUSEWARMING', label: 'ឡើងផ្ទះ' },
 ];
 
+const WEDDING_PROGRAM_TYPE_OPTIONS = [
+  { value: 'ភ្ជាប់ពាក្យ', km: 'ភ្ជាប់ពាក្យ', en: 'Engagement' },
+  { value: 'មង្គលការ', km: 'មង្គលការ', en: 'Wedding ceremony' },
+  { value: 'កាត់ចំណងដៃ', km: 'កាត់ចំណងដៃ', en: 'Gift-cutting ceremony' },
+  { value: 'ពិសារស្លាដក់កន្សែង', km: 'ពិសារស្លាដក់កន្សែង', en: 'Traditional blessing meal' },
+  { value: 'OTHERS', km: 'ផ្សេងៗ', en: 'Others' },
+] as const;
+
+type WeddingProgramType = (typeof WEDDING_PROGRAM_TYPE_OPTIONS)[number]['value'];
+
 function RequiredStar() {
   return <span className="ml-1 text-red-500">*</span>;
 }
 
+function getLocalizedEventTypeName(rawName: string, language: 'km' | 'en') {
+  if (language === 'en') return rawName;
+
+  const key = rawName.toLowerCase();
+  if (key.includes('wedding')) return 'មង្គលការ';
+  if (key.includes('birthday')) return 'ខួបកំណើត';
+  if (key.includes('housewarming')) return 'ឡើងផ្ទះ';
+  if (key.includes('ceremony') || key.includes('other')) return 'បុណ្យទូទៅ';
+  if (key.includes('funeral')) return 'បុណ្យសព';
+  return rawName;
+}
+
 function CreateEventPage() {
   const router = useRouter();
+  const pathname = usePathname();
   const { user, logout, isAuthenticated, isLoading: isAuthLoading } = useAuth();
+  const { language } = useLanguage();
+  const isKhmer = language === 'km';
 
   const [eventType, setEventType] = useState<EventFlowType>('WEDDING');
   const [selectedCategoryKey, setSelectedCategoryKey] = useState(EVENT_CATEGORY_OPTIONS[0]?.key || 'wedding');
   const [eventTypes, setEventTypes] = useState<ApiEventType[]>([]);
-  const [templates, setTemplates] = useState<Template[]>([]);
   const [selectedEventTypeId, setSelectedEventTypeId] = useState('');
-  const [selectedTemplateId, setSelectedTemplateId] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -70,7 +95,7 @@ function CreateEventPage() {
 
   const [groomName, setGroomName] = useState('');
   const [brideName, setBrideName] = useState('');
-  const [weddingProgramType, setWeddingProgramType] = useState('មង្គលការ');
+  const [weddingProgramType, setWeddingProgramType] = useState<WeddingProgramType>('មង្គលការ');
 
   const [ceremonyName, setCeremonyName] = useState('');
   const [watName, setWatName] = useState('');
@@ -139,28 +164,6 @@ function CreateEventPage() {
     setSelectedEventTypeId(matched?.id || eventTypes[0]?.id || '');
   }, [eventType, eventTypes]);
 
-  useEffect(() => {
-    const loadTemplates = async () => {
-      if (!selectedEventTypeId) {
-        setTemplates([]);
-        setSelectedTemplateId('');
-        return;
-      }
-
-      try {
-        const data = await apiClient.getTemplates(selectedEventTypeId);
-        setTemplates(data);
-        setSelectedTemplateId(data[0]?.id || '');
-      } catch (loadError) {
-        console.error('Failed to load templates', loadError);
-        setTemplates([]);
-        setSelectedTemplateId('');
-      }
-    };
-
-    loadTemplates();
-  }, [selectedEventTypeId]);
-
   const selectedCategory = EVENT_CATEGORY_BY_KEY[selectedCategoryKey] || EVENT_CATEGORY_OPTIONS[0];
 
   const eventTypeKhmerLabel = useMemo(
@@ -168,11 +171,11 @@ function CreateEventPage() {
     [selectedCategory, eventType],
   );
 
-  const labelClassName = 'mb-2 block text-sm font-medium text-gray-700 font-khmer-body';
+  const labelClassName = 'mb-2 block text-sm font-medium text-gray-700 dark:text-slate-100 font-khmer-body';
   const inputClassName =
-    'h-11 rounded-xl border-gray-300 bg-white/90 shadow-sm transition focus-visible:border-red-500 focus-visible:ring-2 focus-visible:ring-red-100';
+    'h-11 rounded-xl border-gray-300 bg-white text-gray-900 placeholder:text-gray-400 shadow-sm transition focus-visible:border-red-500 focus-visible:ring-2 focus-visible:ring-red-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:placeholder:text-slate-500 dark:focus-visible:ring-slate-700';
   const selectClassName =
-    'h-11 w-full rounded-xl border border-gray-300 bg-white px-3 text-sm shadow-sm outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-100';
+    'h-11 w-full rounded-xl border border-gray-300 bg-white px-3 text-sm text-gray-900 shadow-sm outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:focus:ring-slate-700';
 
   const sanitizeEnglishDigits = (value: string) => value.replace(/[^0-9]/g, '');
 
@@ -239,7 +242,7 @@ function CreateEventPage() {
   const buildEventData = () => {
     if (eventType === 'WEDDING') {
       if (!groomName.trim() || !brideName.trim()) {
-        throw new Error('សូមបំពេញឈ្មោះកូនប្រុស និង កូនស្រី');
+        throw new Error(isKhmer ? 'សូមបំពេញឈ្មោះកូនប្រុស និង កូនស្រី' : 'Please fill in groom and bride names');
       }
 
       return {
@@ -256,7 +259,7 @@ function CreateEventPage() {
 
     if (eventType === 'CEREMONY') {
       if (!ceremonyName.trim() || !watName.trim() || !mainCelebrant.trim()) {
-        throw new Error('សូមបំពេញ Ceremony Name, Wat Name និង Main Celebrant');
+        throw new Error(isKhmer ? 'សូមបំពេញ Ceremony Name, Wat Name និង Main Celebrant' : 'Please fill in Ceremony Name, Wat Name, and Main Celebrant');
       }
 
       return {
@@ -272,7 +275,7 @@ function CreateEventPage() {
     }
 
     if (!hostName.trim() || !eventTitle.trim()) {
-      throw new Error('សូមបំពេញ Host Name និង Event Title');
+      throw new Error(isKhmer ? 'សូមបំពេញ Host Name និង Event Title' : 'Please fill in Host Name and Event Title');
     }
 
     return {
@@ -299,8 +302,8 @@ function CreateEventPage() {
     const hasFile = (file: File | null) => !!file && file.size > 0;
 
     try {
-      if (!startDate || !address.trim()) {
-        throw new Error('សូមបំពេញ Date/Time និង Address');
+      if (!startDate) {
+        throw new Error(isKhmer ? 'សូមបំពេញ Date/Time' : 'Please fill in Date/Time');
       }
 
       const baseData = buildEventData();
@@ -338,7 +341,7 @@ function CreateEventPage() {
         khqrDollar,
         khqrRiel,
         selectedEventTypeId || undefined,
-        selectedTemplateId || undefined,
+        undefined,
         address.trim(),
         undefined,
       );
@@ -360,17 +363,17 @@ function CreateEventPage() {
   const uploadSections = [
     {
       key: 'backgroundImage',
-      label: 'រូបភាពផ្ទៃខាងក្រោយ',
+      label: isKhmer ? 'រូបភាពផ្ទៃខាងក្រោយ' : 'Background Image',
       isKhqr: false,
     },
     {
       key: 'khqrDollar',
-      label: 'KHQR ប្រាក់ដុល្លារ',
+      label: isKhmer ? 'KHQR ប្រាក់ដុល្លារ' : 'KHQR Dollar',
       isKhqr: true,
     },
     {
       key: 'khqrRiel',
-      label: 'KHQR ប្រាក់រៀល',
+      label: isKhmer ? 'KHQR ប្រាក់រៀល' : 'KHQR Riel',
       isKhqr: true,
     },
   ];
@@ -385,7 +388,7 @@ function CreateEventPage() {
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <div className="inline-block h-12 w-12 animate-spin rounded-full border-b-2 border-rose-500" />
-          <p className="mt-4 text-gray-600">Loading...</p>
+          <p className="mt-4 text-gray-600">{isKhmer ? 'កំពុងដំណើរការ...' : 'Loading...'}</p>
         </div>
       </div>
     );
@@ -396,7 +399,7 @@ function CreateEventPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 font-khmer-body flex flex-col">
+    <div className="min-h-screen bg-gray-50 font-khmer-body flex flex-col dark:bg-slate-950 dark:text-slate-200">
       {/* Mobile overlay */}
       {isMobileMenuOpen && (
         <div className="fixed inset-0 z-40 bg-black/40 lg:hidden" aria-hidden="true" />
@@ -405,7 +408,7 @@ function CreateEventPage() {
       {/* Mobile slide-in sidebar */}
       <div
         ref={mobileMenuRef}
-        className={`fixed inset-y-0 left-0 z-50 w-72 bg-white shadow-xl transition-transform duration-300 ease-in-out lg:hidden ${
+        className={`fixed inset-y-0 left-0 z-50 w-72 bg-white shadow-xl transition-transform duration-300 ease-in-out dark:bg-slate-900 lg:hidden ${
           isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
@@ -419,72 +422,47 @@ function CreateEventPage() {
             <X className="h-5 w-5" />
           </button>
         </div>
-        <div className="border-b border-gray-100 px-6 pb-4">
-          <h2 className="font-khmer-heading text-xl text-gray-900">Pithi Digital</h2>
-          <p className="mt-1 text-sm text-gray-500">Dashboard Menu</p>
-        </div>
-        <nav className="space-y-1 p-4">
-          <Link href="/dashboard" onClick={() => setIsMobileMenuOpen(false)} className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">
-            <Home className="h-4 w-4" /> ទំព័រដើម
-          </Link>
-          <Link href="/events/create" onClick={() => setIsMobileMenuOpen(false)} className="flex items-center gap-2 rounded-lg bg-rose-50 px-3 py-2 text-sm font-medium text-rose-700">
-            <Plus className="h-4 w-4" /> បង្កើតព្រឹត្តិការណ៍ថ្មី
-          </Link>
-          <Link href="/dashboard/profile" onClick={() => setIsMobileMenuOpen(false)} className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">
-            <UserCircle className="h-4 w-4" /> Profile
-          </Link>
-        </nav>
-        <div className="px-4 mt-2">
-          <Button variant="outline" onClick={() => { handleSignOut(); setIsMobileMenuOpen(false); }} className="w-full border-gray-200">
-            Sign Out
-          </Button>
-        </div>
+        <DashboardSharedSidebar
+          currentPath={pathname}
+          onSignOut={handleSignOut}
+          onLinkClick={() => setIsMobileMenuOpen(false)}
+        />
       </div>
 
       <div className="mx-auto flex w-full max-w-7xl flex-1">
         {/* Desktop sidebar */}
-        <aside className="hidden w-70 shrink-0 border-r border-gray-200 bg-white lg:block">
-          <div className="sticky top-0 p-6">
-            <h2 className="font-khmer-heading text-xl text-gray-900">Pithi Digital</h2>
-            <p className="mt-1 text-sm text-gray-500">Dashboard Menu</p>
-
-            <nav className="mt-6 space-y-2">
-              <Link href="/dashboard" className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">
-                <Home className="h-4 w-4" /> ទំព័រដើម
-              </Link>
-              <Link href="/events/create" className="flex items-center gap-2 rounded-lg bg-rose-50 px-3 py-2 text-sm font-medium text-rose-700">
-                <Plus className="h-4 w-4" /> បង្កើតព្រឹត្តិការណ៍ថ្មី
-              </Link>
-              <Link href="/dashboard/profile" className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">
-                <UserCircle className="h-4 w-4" /> Profile
-              </Link>
-            </nav>
-
-            <Button variant="outline" onClick={handleSignOut} className="mt-6 w-full border-gray-200">
-              Sign Out
-            </Button>
+        <aside className="hidden w-70 shrink-0 border-r border-gray-200 bg-white dark:border-slate-800 dark:bg-slate-900 lg:block">
+          <div className="sticky top-0">
+            <DashboardSharedSidebar
+              currentPath={pathname}
+              onSignOut={handleSignOut}
+            />
           </div>
         </aside>
 
         <div className="min-w-0 flex-1">
-          <header className="sticky top-0 z-30 border-b border-gray-200 bg-white/95 backdrop-blur">
+          <header className="sticky top-0 z-30 border-b border-gray-200 bg-white/95 backdrop-blur dark:border-slate-800 dark:bg-slate-900/95">
             <div className="flex w-full items-center gap-3 px-4 py-3 sm:px-6">
               {/* Hamburger – mobile only */}
               <button
                 type="button"
                 aria-label="Open menu"
                 onClick={() => setIsMobileMenuOpen(true)}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-gray-600 hover:bg-gray-100 lg:hidden"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-gray-600 hover:bg-gray-100 dark:text-slate-300 dark:hover:bg-slate-800 lg:hidden"
               >
                 <Menu className="h-5 w-5" />
               </button>
 
               <div className="min-w-0 flex-1">
-                <h1 className="truncate font-khmer-heading text-xl text-gray-900 sm:text-3xl">បង្កើតព្រឹត្តិការណ៍ថ្មី</h1>
-                <p className="mt-0.5 font-khmer-body text-xs text-gray-500 sm:text-sm">បំពេញព័ត៌មានកម្មវិធីរបស់អ្នក</p>
+                <h1 className="truncate font-khmer-heading text-xl text-gray-900 dark:text-slate-100 sm:text-3xl">{isKhmer ? 'បង្កើតព្រឹត្តិការណ៍ថ្មី' : 'Create Event'}</h1>
+                <p className="mt-0.5 font-khmer-body text-xs text-gray-500 dark:text-slate-400 sm:text-sm">{isKhmer ? 'បំពេញព័ត៌មានកម្មវិធីរបស់អ្នក' : 'Fill your event information'}</p>
               </div>
 
-              <div className="hidden items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1.5 sm:flex">
+              <div className="flex items-center gap-2">
+                <DashboardLanguageThemeControls />
+              </div>
+
+              <div className="hidden sm:flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1.5">
                 {user?.avatarUrl ? (
                   <img
                     src={user.avatarUrl}
@@ -502,36 +480,17 @@ function CreateEventPage() {
           </header>
 
           <main className="px-4 py-6 sm:px-6 sm:py-8">
-            <div className="mx-auto w-full max-w-5xl rounded-2xl bg-white p-4 shadow-md sm:p-8">
+            <div className="mx-auto w-full max-w-5xl rounded-2xl bg-white p-4 text-gray-900 shadow-md dark:border dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 sm:p-8">
               <form onSubmit={handleSubmit} className="space-y-5">
-            {error && <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">{error}</div>}
+            {error && (
+              <MessageCard text={error} tone="error" onClose={() => setError('')} className="p-4" />
+            )}
 
-            <div>
-              <label htmlFor="eventCategory" className={labelClassName}>
-                ប្រភេទកម្មវិធី<RequiredStar />
-              </label>
-              <div className="relative">
-                <ListChecks className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
-                <select
-                  id="eventCategory"
-                  name="eventCategory"
-                  value={selectedCategoryKey}
-                  onChange={(e) => setSelectedCategoryKey(e.target.value)}
-                  disabled={isLoading}
-                  className={`${selectClassName} pl-10`}
-                >
-                  {EVENT_CATEGORY_OPTIONS.map((option) => (
-                    <option key={option.key} value={option.key}>
-                      {option.subtitle}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
+            <input type="hidden" name="eventCategory" value={selectedCategoryKey} />
 
             <div>
               <label htmlFor="eventTypeId" className={labelClassName}>
-                Event Type Catalog
+                {isKhmer ? 'ប្រភេទកម្មវិធី (Catalog)' : 'Event Type Catalog'}
               </label>
               <select
                 id="eventTypeId"
@@ -542,32 +501,9 @@ function CreateEventPage() {
               >
                 {eventTypes.map((item) => (
                   <option key={item.id} value={item.id}>
-                    {item.name}
+                    {getLocalizedEventTypeName(item.name, language)}
                   </option>
                 ))}
-              </select>
-            </div>
-
-            <div>
-              <label htmlFor="templateId" className={labelClassName}>
-                Template
-              </label>
-              <select
-                id="templateId"
-                value={selectedTemplateId}
-                onChange={(e) => setSelectedTemplateId(e.target.value)}
-                disabled={isLoading || !selectedEventTypeId || templates.length === 0}
-                className={selectClassName}
-              >
-                {templates.length === 0 ? (
-                  <option value="">No template available</option>
-                ) : (
-                  templates.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.name}
-                    </option>
-                  ))
-                )}
               </select>
             </div>
 
@@ -575,7 +511,7 @@ function CreateEventPage() {
               <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
                 <div>
                   <label htmlFor="groomName" className={labelClassName}>
-                    Groom Name<RequiredStar />
+                    {isKhmer ? 'ឈ្មោះកូនប្រុស' : 'Groom Name'}<RequiredStar />
                   </label>
                   <div className="relative">
                     <User className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
@@ -591,7 +527,7 @@ function CreateEventPage() {
 
                 <div>
                   <label htmlFor="brideName" className={labelClassName}>
-                    Bride Name<RequiredStar />
+                    {isKhmer ? 'ឈ្មោះកូនស្រី' : 'Bride Name'}<RequiredStar />
                   </label>
                   <div className="relative">
                     <Users className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
@@ -607,19 +543,20 @@ function CreateEventPage() {
 
                 <div className="sm:col-span-2">
                   <label htmlFor="weddingProgramType" className={labelClassName}>
-                    Program Type
+                    {isKhmer ? 'ប្រភេទកម្មវិធី' : 'Program Type'}
                   </label>
                   <select
                     id="weddingProgramType"
                     value={weddingProgramType}
-                    onChange={(e) => setWeddingProgramType(e.target.value)}
+                    onChange={(e) => setWeddingProgramType(e.target.value as WeddingProgramType)}
                     disabled={isLoading}
                     className={selectClassName}
                   >
-                    <option value="ភ្ជាប់ពាក្យ">ភ្ជាប់ពាក្យ</option>
-                    <option value="មង្គលការ">មង្គលការ</option>
-                    <option value="កាត់ចំណងដៃ">កាត់ចំណងដៃ</option>
-                    <option value="ពិសារស្លាដក់កន្សែង">ពិសារស្លាដក់កន្សែង</option>
+                    {WEDDING_PROGRAM_TYPE_OPTIONS.map((item) => (
+                      <option key={item.value} value={item.value}>
+                        {isKhmer ? item.km : item.en}
+                      </option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -629,7 +566,7 @@ function CreateEventPage() {
               <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
                 <div>
                   <label htmlFor="ceremonyName" className={labelClassName}>
-                    Ceremony Name<RequiredStar />
+                    {isKhmer ? 'ឈ្មោះពិធី' : 'Ceremony Name'}<RequiredStar />
                   </label>
                   <Input
                     id="ceremonyName"
@@ -642,7 +579,7 @@ function CreateEventPage() {
 
                 <div>
                   <label htmlFor="watName" className={labelClassName}>
-                    Location (Wat Name)<RequiredStar />
+                    {isKhmer ? 'ទីតាំង (ឈ្មោះវត្ត)' : 'Location (Wat Name)'}<RequiredStar />
                   </label>
                   <Input
                     id="watName"
@@ -655,7 +592,7 @@ function CreateEventPage() {
 
                 <div className="sm:col-span-2">
                   <label htmlFor="mainCelebrant" className={labelClassName}>
-                    Main Celebrant<RequiredStar />
+                    {isKhmer ? 'ព្រះសង្ឃនាំពិធី' : 'Main Celebrant'}<RequiredStar />
                   </label>
                   <Input
                     id="mainCelebrant"
@@ -672,7 +609,7 @@ function CreateEventPage() {
               <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
                 <div>
                   <label htmlFor="hostName" className={labelClassName}>
-                    Host Name<RequiredStar />
+                    {isKhmer ? 'ឈ្មោះម្ចាស់កម្មវិធី' : 'Host Name'}<RequiredStar />
                   </label>
                   <div className="relative">
                     <Home className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
@@ -688,7 +625,7 @@ function CreateEventPage() {
 
                 <div>
                   <label htmlFor="eventTitle" className={labelClassName}>
-                    Event Title<RequiredStar />
+                    {isKhmer ? 'ចំណងជើងកម្មវិធី' : 'Event Title'}<RequiredStar />
                   </label>
                   <div className="relative">
                     <PartyPopper className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
@@ -706,7 +643,7 @@ function CreateEventPage() {
 
             <div>
               <label htmlFor="startDate" className={labelClassName}>
-                Date/Time<RequiredStar />
+                {isKhmer ? 'កាលបរិច្ឆេទ/ម៉ោង' : 'Date/Time'}<RequiredStar />
               </label>
               <div className="relative">
                 <Calendar className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
@@ -725,7 +662,7 @@ function CreateEventPage() {
 
             <div>
               <label htmlFor="endDate" className={labelClassName}>
-                ថ្ងៃបញ្ចប់កម្មវិធី
+                {isKhmer ? 'ថ្ងៃបញ្ចប់កម្មវិធី' : 'Event End Date'}
               </label>
               <div className="relative">
                 <Calendar className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
@@ -743,15 +680,17 @@ function CreateEventPage() {
 
             <div>
               <label htmlFor="address" className={labelClassName}>
-                Address<RequiredStar />
+                {isKhmer ? 'អាសយដ្ឋាន' : 'Address'}
               </label>
+              <p className="mb-2 text-xs text-gray-500 dark:text-slate-400 font-khmer-body">
+                {isKhmer ? 'មិនទាន់ដាក់ក៏បាន' : 'Optional'}
+              </p>
               <div className="relative">
                 <MapPin className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
                 <Input
                   id="address"
                   name="address"
                   type="text"
-                  required
                   value={address}
                   onChange={(e) => setAddress(e.target.value)}
                   disabled={isLoading}
@@ -762,8 +701,11 @@ function CreateEventPage() {
 
             <div>
               <label htmlFor="googleMapLink" className={labelClassName}>
-                Google Maps Link
+                {isKhmer ? 'តំណ Google Maps' : 'Google Maps Link'}
               </label>
+              <p className="mb-2 text-xs text-gray-500 dark:text-slate-400 font-khmer-body">
+                {isKhmer ? 'មិនទាន់ដាក់ក៏បាន' : 'Optional'}
+              </p>
               <div className="relative">
                 <Globe className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
                 <Input
@@ -779,8 +721,8 @@ function CreateEventPage() {
             </div>
 
             <div className="rounded-lg border border-gray-200 p-4">
-              <p className="mb-3 text-sm font-medium text-gray-700">អ្នកណាអាចចូលមើលបាន?</p>
-              <div className="space-y-2 text-sm text-gray-700">
+              <p className="mb-3 text-sm font-medium text-gray-700 dark:text-slate-100">{isKhmer ? 'អ្នកណាអាចចូលមើលបាន?' : 'Who can view this?'}</p>
+              <div className="space-y-2 text-sm text-gray-700 dark:text-slate-100">
                 <label className="flex items-center gap-2">
                   <input
                     type="radio"
@@ -790,7 +732,7 @@ function CreateEventPage() {
                     onChange={() => setVisibility('PUBLIC')}
                     disabled={isLoading}
                   />
-                  គ្រប់គ្នា
+                  {isKhmer ? 'គ្រប់គ្នា' : 'Everyone'}
                 </label>
                 <label className="flex items-center gap-2">
                   <input
@@ -801,27 +743,30 @@ function CreateEventPage() {
                     onChange={() => setVisibility('PRIVATE')}
                     disabled={isLoading}
                   />
-                  សម្រាប់តែខ្ញុំ
+                  {isKhmer ? 'សម្រាប់តែខ្ញុំ' : 'Only me'}
                 </label>
               </div>
             </div>
 
             <div className="rounded-lg border border-gray-200 p-4">
-              <label className="flex items-center gap-2 text-sm text-gray-700">
+              <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-slate-100">
                 <input
                   type="checkbox"
                   checked={preventDuplicateGuestNames}
                   onChange={(e) => setPreventDuplicateGuestNames(e.target.checked)}
                   disabled={isLoading}
                 />
-                មិនអនុញ្ញាតឱ្យមានភ្ញៀវឈ្មោះដូចគ្នា
+                {isKhmer ? 'មិនអនុញ្ញាតឱ្យមានភ្ញៀវឈ្មោះដូចគ្នា' : 'Prevent duplicate guest names'}
               </label>
             </div>
 
             <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
               {uploadSections.map((section) => (
                 <div key={section.key}>
-                  <p className="mb-2 text-sm font-medium text-gray-700 font-khmer-body">{section.label}</p>
+                  <p className="text-sm font-medium text-gray-700 dark:text-slate-100 font-khmer-body">{section.label}</p>
+                  <p className="mb-2 text-xs text-gray-500 dark:text-slate-400 font-khmer-body">
+                    {isKhmer ? 'មិនទាន់ដាក់ក៏បាន' : 'Optional'}
+                  </p>
                   <label
                     htmlFor={section.key}
                     className={`flex h-48 cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed px-3 text-center text-sm transition-all ${
@@ -841,14 +786,14 @@ function CreateEventPage() {
                         />
                         <p className="mb-1 inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
                           <CheckCircle2 className="h-3.5 w-3.5" />
-                          Success
+                          {isKhmer ? 'ជោគជ័យ' : 'Success'}
                         </p>
                         <p className="line-clamp-2 break-all text-xs text-gray-600">{fileNames[section.key]}</p>
                       </>
                     ) : (
                       <>
                         <Upload className="mb-2 h-5 w-5" />
-                        <p className="font-khmer-body">Click to upload or drag and drop</p>
+                        <p className="font-khmer-body">{isKhmer ? 'ចុចដើម្បីបញ្ចូល ឬ អូសទម្លាក់' : 'Click to upload or drag and drop'}</p>
                       </>
                     )}
                     <input
@@ -869,7 +814,7 @@ function CreateEventPage() {
               disabled={isLoading}
               className="h-12 w-full rounded-xl bg-red-600 text-base text-white hover:bg-red-700"
             >
-              {isLoading ? 'កំពុងរក្សាទុក...' : 'រក្សាទុក'}
+              {isLoading ? (isKhmer ? 'កំពុងរក្សាទុក...' : 'Saving...') : (isKhmer ? 'រក្សាទុក' : 'Save')}
             </Button>
               </form>
             </div>
@@ -877,9 +822,9 @@ function CreateEventPage() {
         </div>
       </div>
 
-      <footer className="mt-auto border-t border-gray-200 bg-white">
-        <div className="mx-auto max-w-7xl px-4 py-5 text-center text-sm text-gray-500 font-khmer-body sm:px-6 lg:px-8">
-          <p>&copy; 2026 Pithi Digital. All rights reserved.</p>
+      <footer className="mt-auto border-t border-gray-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+        <div className="mx-auto max-w-7xl px-4 py-5 text-center text-sm text-gray-500 dark:text-slate-400 font-khmer-body sm:px-6 lg:px-8">
+          <p>&copy; 2026 Pithi Digital. {isKhmer ? 'រក្សាសិទ្ធិគ្រប់យ៉ាង។' : 'All rights reserved.'}</p>
         </div>
       </footer>
     </div>

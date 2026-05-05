@@ -10,14 +10,26 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { extname } from 'path';
-import { createClient } from '@supabase/supabase-js';
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { JwtGuard } from '../auth/guards/jwt.guard';
 
-function getSupabaseClient() {
-  const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) throw new InternalServerErrorException('Supabase storage is not configured');
-  return createClient(url, key);
+function getR2Client(): S3Client {
+  const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+  const accessKeyId = process.env.CLOUDFLARE_R2_ACCESS_KEY_ID;
+  const secretAccessKey = process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY;
+
+  if (!accountId || !accessKeyId || !secretAccessKey) {
+    throw new InternalServerErrorException('Cloudflare R2 is not configured');
+  }
+
+  return new S3Client({
+    region: 'auto',
+    endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
+    credentials: {
+      accessKeyId,
+      secretAccessKey,
+    },
+  });
 }
 
 @Controller('api/uploads')
@@ -35,6 +47,13 @@ export class UploadsController {
       throw new BadRequestException('No file uploaded');
     }
 
+    const bucket = process.env.CLOUDFLARE_R2_BUCKET_NAME;
+    const publicUrl = process.env.CLOUDFLARE_R2_PUBLIC_URL;
+
+    if (!bucket) {
+      throw new InternalServerErrorException('CLOUDFLARE_R2_BUCKET_NAME is not configured');
+    }
+
     const extension = extname(file.originalname).toLowerCase();
     const baseName = file.originalname
       .replace(extname(file.originalname), '')
@@ -45,24 +64,29 @@ export class UploadsController {
 
     const filename = `${Date.now()}-${baseName}${extension}`;
 
-    const supabase = getSupabaseClient();
+    const client = getR2Client();
 
-    const { error } = await supabase.storage
-      .from('uploads')
-      .upload(filename, file.buffer, {
-        contentType: file.mimetype,
-        upsert: false,
-      });
+    const command = new PutObjectCommand({
+      Bucket: bucket,
+      Key: filename,
+      Body: file.buffer,
+      ContentType: file.mimetype,
+    });
 
-    if (error) {
-      throw new InternalServerErrorException(`Upload failed: ${error.message}`);
+    try {
+      await client.send(command);
+    } catch (err: any) {
+      throw new InternalServerErrorException(`Upload failed: ${err.message}`);
     }
 
-    const { data } = supabase.storage.from('uploads').getPublicUrl(filename);
+    // Use custom public domain if set, otherwise fall back to R2 public URL pattern
+    const fileUrl = publicUrl
+      ? `${publicUrl.replace(/\/$/, '')}/${filename}`
+      : `https://${process.env.CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com/${bucket}/${filename}`;
 
     return {
       filename,
-      url: data.publicUrl,
+      url: fileUrl,
     };
   }
 }

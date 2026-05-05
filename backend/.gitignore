@@ -3,3 +3,6 @@ node_modules
 .env
 
 /generated/prisma
+
+# Local uploads (all files go to Cloudflare R2 instead)
+/uploads/

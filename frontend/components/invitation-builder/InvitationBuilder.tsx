@@ -3,10 +3,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Event } from '@/lib/api-client';
 import { apiClient } from '@/lib/api-client';
+import { getEventTemplateCatalogImage } from '@/lib/template-images';
+import { getTemplateStyleDefaults } from '@/lib/template-style';
 import EditorPanel from './EditorPanel';
 import PreviewPanel from './PreviewPanel';
 import ResizableSplitLayout from './ResizableSplitLayout';
 import type { AgendaItem, AgendaSection, BuilderState, MusicOption } from './types';
+import { Assets, getSeededCoverImage, getSeededGalleryImages } from '@/lib/assets';
 
 const createId = () => `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
@@ -34,15 +37,13 @@ const makeSvgDataUrl = (label: string, background: string, foreground: string) =
 };
 
 const demoCoverImage = makeSvgDataUrl('រូបភាពគម្រប (Cover Image)', '#fff0f2', '#9f1239');
-const demoMapImage = '/map.png';
-const demoKhqrUsd = makeSvgDataUrl('KHQR (USD)', '#f0fdf4', '#0f766e');
-const demoKhqrKhr = makeSvgDataUrl('KHQR (KHR)', '#fff7ed', '#c2410c');
+const demoMapImage = Assets.map;
+const demoKhqrUsd = Assets.khqrSampleAbaPay;
+const demoKhqrKhr = Assets.khqrSampleAbaPay;
 const demoMapLink = 'https://maps.app.goo.gl/9F6oE2sEXm5s2bGF8';
 
-const defaultMusicOptions: MusicOption[] = [
-  { id: 'classic', label: 'Classic Wedding', url: '/audio/wedding.mp3' },
-  { id: 'romantic', label: 'Romantic Piano', url: '/audio/wedding.mp3' },
-  { id: 'soft', label: 'Soft Strings', url: '/audio/wedding.mp3' },
+const fallbackMusicOptions: MusicOption[] = [
+  { id: 'classic', label: 'Classic Wedding', url: Assets.weddingMusic },
 ];
 
 const fileToDataUrl = (file: File): Promise<string> =>
@@ -153,6 +154,7 @@ type InvitationBuilderProps = {
   event?: Event | null;
   initialState?: BuilderState | null;
   onStateChange?: (state: BuilderState) => void;
+  forceMobilePreviewToken?: number;
 };
 
 const formatBuilderEventDate = (rawDate?: string) => {
@@ -178,13 +180,13 @@ const formatBuilderEventDate = (rawDate?: string) => {
   return `${day}/${month}/${year}, ${hour}:${minute} ${amPm}`;
 };
 
-export default function InvitationBuilder({ event, initialState, onStateChange }: InvitationBuilderProps) {
+export default function InvitationBuilder({ event, initialState, onStateChange, forceMobilePreviewToken = 0 }: InvitationBuilderProps) {
   const [state, setState] = useState<BuilderState>(() => {
     if (initialState) {
       return {
         ...initialState,
         eventEndDate: initialState.eventEndDate || '',
-      };
+      } as BuilderState;
     }
 
     const formattedDate = formatBuilderEventDate(event?.date);
@@ -196,15 +198,20 @@ export default function InvitationBuilder({ event, initialState, onStateChange }
       typeof metadata?.eventEndDate === 'string' ? metadata.eventEndDate : '';
 
     const defaultAgendaSections = normalizeAgendaSectionsFromEvent(event);
+    const templateImage = getEventTemplateCatalogImage(event);
+    const styleDefaults = getTemplateStyleDefaults(event?.template);
+    const eventGalleryImages = getGalleryImagesFromEvent(event);
     return {
+      styleVariant: styleDefaults.styleVariant as BuilderState['styleVariant'],
+      templateId: event?.templateId || event?.template?.id,
       language: 'km',
       musicEnabled: true,
       musicId: 'classic',
-      musicUrl: event?.musicUrl || defaultMusicOptions[0]?.url || '',
-      textColor: '#e6c628',
-      headingColor: '#142e7b',
-      coverImageUrl: event?.coverImage || demoCoverImage,
-      backgroundUrl: '/GlfpFt.jpg',
+      musicUrl: event?.musicUrl || fallbackMusicOptions[0]?.url || '',
+      textColor: styleDefaults.textColor,
+      headingColor: styleDefaults.headingColor,
+      coverImageUrl: templateImage || getSeededCoverImage(event?.id || event?.title || formattedDate) || demoCoverImage,
+      backgroundUrl: styleDefaults.backgroundUrl,
       eventTitle: event?.title || 'សិរីមង្គលអាពាហ៍ពិពាហ៍',
       eventSubtitle: '',
       eventDate: formattedDate,
@@ -216,13 +223,13 @@ export default function InvitationBuilder({ event, initialState, onStateChange }
       agendaSections: defaultAgendaSections,
       mapUrl: event?.googleMapLink || demoMapLink,
       mapImageUrl: demoMapImage,
-      galleryImages: getGalleryImagesFromEvent(event),
+      galleryImages: eventGalleryImages.length > 0 ? eventGalleryImages : getSeededGalleryImages(event?.id || event?.title || formattedDate),
       thankYouTitle: 'សូមអរគុណ និងសូមអភ័យទោស',
       thankYouMessage:
         'យើងខ្ញុំទាំងពីរ សូមថ្លែងអំណរគុណ យ៉ាងជ្រាលជ្រៅ ចំពោះវត្តមាន ដ៏ឧត្តុង្គឧត្តមរបស់ សម្តេច ឯកឧត្តម លោកជំទាវ លោកអ្នកឧកញ៉ា អ្នកឧកញ៉ា ឧកញ៉ា លោក លោកស្រី អ្នកនាង កញ្ញា ដែលបាន អញ្ជើញចូលរួមជាកិត្តិយស ក្នុងពិធីសិរីសួស្តីអាពាហ៍ពិពាហ៍ របស់យើងខ្ញុំ នាពេលខាងមុខនេះ។ យើងខ្ញុំសូមការខន្តីអភ័យទោស ដែលពុំបានជូនលិខិតអញ្ជើញ ដោយផ្ទាល់ ។ ដោយការវកិច្ចដ៏ខ្ពង់ខ្ពស់ពីយើងខ្ញុំ។',
       khqrUsdUrl: event?.khqrDollar || demoKhqrUsd,
       khqrKhrUrl: event?.khqrRiel || demoKhqrKhr,
-    };
+    } as BuilderState;
   });
   const latestStateRef = useRef(state);
   const metadataRef = useRef<Record<string, unknown>>({});
@@ -258,28 +265,36 @@ export default function InvitationBuilder({ event, initialState, onStateChange }
 
     const normalizedEventDate = formatBuilderEventDate(event.date);
     const normalizedAgenda = normalizeAgendaSectionsFromEvent(event);
-    setState((prev) => ({
-      ...prev,
-      musicUrl: event.musicUrl || prev.musicUrl,
-      coverImageUrl: event.coverImage || prev.coverImageUrl,
-      eventDate:
-        !prev.eventDate ||
-        prev.eventDate === 'ថ្ងៃរៀបអាពាហ៍ពិពាហ៍' ||
-        /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(prev.eventDate.trim())
-          ? normalizedEventDate
-          : prev.eventDate,
-      eventEndDate:
-        !prev.eventEndDate ||
-        prev.eventEndDate === 'ថ្ងៃបញ្ចប់កម្មវិធី' ||
-        /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(prev.eventEndDate.trim())
-          ? (eventEndDateFromMetadata || normalizedEventDate)
-          : prev.eventEndDate,
-      mapUrl: event.googleMapLink || prev.mapUrl,
-      khqrUsdUrl: event.khqrDollar || prev.khqrUsdUrl,
-      khqrKhrUrl: event.khqrRiel || prev.khqrKhrUrl,
-      agendaSections: normalizedAgenda,
-      galleryImages: getGalleryImagesFromEvent(event),
-    }));
+    const templateImage = getEventTemplateCatalogImage(event);
+    const styleDefaults = getTemplateStyleDefaults(event.template);
+    const eventGalleryImages = getGalleryImagesFromEvent(event);
+    setState((prev) =>
+      ({
+        ...prev,
+        styleVariant: (prev.styleVariant || styleDefaults.styleVariant) as BuilderState['styleVariant'],
+        templateId: prev.templateId || event.templateId || event.template?.id,
+        musicUrl: event.musicUrl || prev.musicUrl,
+        coverImageUrl: prev.coverImageUrl || templateImage || getSeededCoverImage(event.id || event.title || event.date) || demoCoverImage,
+        backgroundUrl: prev.backgroundUrl || styleDefaults.backgroundUrl,
+        eventDate:
+          !prev.eventDate ||
+            prev.eventDate === 'ថ្ងៃរៀបអាពាហ៍ពិពាហ៍' ||
+            /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(prev.eventDate.trim())
+            ? normalizedEventDate
+            : prev.eventDate,
+        eventEndDate:
+          !prev.eventEndDate ||
+            prev.eventEndDate === 'ថ្ងៃបញ្ចប់កម្មវិធី' ||
+            /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(prev.eventEndDate.trim())
+            ? (eventEndDateFromMetadata || normalizedEventDate)
+            : prev.eventEndDate,
+        mapUrl: event.googleMapLink || prev.mapUrl,
+        khqrUsdUrl: event.khqrDollar || prev.khqrUsdUrl,
+        khqrKhrUrl: event.khqrRiel || prev.khqrKhrUrl,
+        agendaSections: normalizedAgenda,
+        galleryImages: eventGalleryImages.length > 0 ? eventGalleryImages : getSeededGalleryImages(event.id || event.title || event.date),
+      }) as BuilderState,
+    );
     isAgendaReadyForSync.current = true;
   }, [event]);
 
@@ -340,7 +355,29 @@ export default function InvitationBuilder({ event, initialState, onStateChange }
     };
   }, []);
 
-  const musicOptions = defaultMusicOptions;
+  const [musicOptions, setMusicOptions] = useState<MusicOption[]>(fallbackMusicOptions);
+  const [mobileView, setMobileView] = useState<'editor' | 'preview'>('editor');
+
+  useEffect(() => {
+    if (forceMobilePreviewToken > 0) {
+      setMobileView('preview');
+    }
+  }, [forceMobilePreviewToken]);
+
+  useEffect(() => {
+    apiClient.getMusic().then((tracks) => {
+      if (tracks.length > 0) {
+        const options = tracks.map((t) => ({ id: t.id, label: t.name, url: t.url }));
+        setMusicOptions(options);
+        // Sync musicId: if current id doesn't match any DB option, match by URL or fallback to first
+        setState((prev) => {
+          const matched = options.find((o) => o.id === prev.musicId || o.url === prev.musicUrl);
+          if (matched) return { ...prev, musicId: matched.id, musicUrl: matched.url };
+          return { ...prev, musicId: options[0].id, musicUrl: prev.musicUrl || options[0].url };
+        });
+      }
+    }).catch(() => {/* keep fallback */ });
+  }, []);
 
   const updateState = (updates: Partial<BuilderState>) => {
     setState((prev) => ({ ...prev, ...updates }));
@@ -378,9 +415,9 @@ export default function InvitationBuilder({ event, initialState, onStateChange }
       agendaSections: prev.agendaSections.map((section) =>
         section.id === sectionId
           ? {
-              ...section,
-              items: [...section.items, makeAgendaItem(formatBuilderDateOnly(event?.date))],
-            }
+            ...section,
+            items: [...section.items, makeAgendaItem(formatBuilderDateOnly(event?.date))],
+          }
           : section,
       ),
     }));
@@ -392,11 +429,11 @@ export default function InvitationBuilder({ event, initialState, onStateChange }
       agendaSections: prev.agendaSections.map((section) =>
         section.id === sectionId
           ? {
-              ...section,
-              items: section.items.map((item) =>
-                item.id === itemId ? { ...item, ...updates } : item,
-              ),
-            }
+            ...section,
+            items: section.items.map((item) =>
+              item.id === itemId ? { ...item, ...updates } : item,
+            ),
+          }
           : section,
       ),
     }));
@@ -408,9 +445,9 @@ export default function InvitationBuilder({ event, initialState, onStateChange }
       agendaSections: prev.agendaSections.map((section) =>
         section.id === sectionId
           ? {
-              ...section,
-              items: section.items.filter((item) => item.id !== itemId),
-            }
+            ...section,
+            items: section.items.filter((item) => item.id !== itemId),
+          }
           : section,
       ),
     }));
@@ -435,32 +472,66 @@ export default function InvitationBuilder({ event, initialState, onStateChange }
     }
   };
 
+  const editorPanel = (
+    <EditorPanel
+      data={state}
+      musicOptions={musicOptions}
+      onChange={updateState}
+      onAddAgendaSection={addAgendaSection}
+      onUpdateAgendaSection={updateAgendaSection}
+      onRemoveAgendaSection={removeAgendaSection}
+      onAddAgendaItem={addAgendaItem}
+      onUpdateAgendaItem={updateAgendaItem}
+      onRemoveAgendaItem={removeAgendaItem}
+      onCoverChange={(file) => updateImage('coverImageUrl', file)}
+      onMapImageChange={(file) => updateImage('mapImageUrl', file)}
+      onKhqrUsdChange={(file) => updateImage('khqrUsdUrl', file)}
+      onKhqrKhrChange={(file) => updateImage('khqrKhrUrl', file)}
+      onBackgroundChange={(file) => updateImage('backgroundUrl', file)}
+    />
+  );
+
+  const previewPanel = <PreviewPanel data={state} />;
+
   return (
-    <section className="rounded-2xl border border-gray-100 bg-white shadow-sm overflow-hidden" style={{ height: 'calc(100vh - 200px)' }}>
-      <ResizableSplitLayout
-        leftPanel={
-          <EditorPanel
-            data={state}
-            musicOptions={musicOptions}
-            onChange={updateState}
-            onAddAgendaSection={addAgendaSection}
-            onUpdateAgendaSection={updateAgendaSection}
-            onRemoveAgendaSection={removeAgendaSection}
-            onAddAgendaItem={addAgendaItem}
-            onUpdateAgendaItem={updateAgendaItem}
-            onRemoveAgendaItem={removeAgendaItem}
-            onCoverChange={(file) => updateImage('coverImageUrl', file)}
-            onMapImageChange={(file) => updateImage('mapImageUrl', file)}
-            onKhqrUsdChange={(file) => updateImage('khqrUsdUrl', file)}
-            onKhqrKhrChange={(file) => updateImage('khqrKhrUrl', file)}
-            onBackgroundChange={(file) => updateImage('backgroundUrl', file)}
-          />
-        }
-        rightPanel={<PreviewPanel data={state} />}
-        defaultLeftWidth={52.5}
-        minLeftWidth={300}
-        minRightWidth={350}
-      />
+    <section className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900" style={{ height: 'calc(100vh - 145px)' }}>
+      <div className="md:hidden h-full">
+        <div className="flex gap-2 border-b border-gray-100 bg-white p-3 dark:border-slate-700 dark:bg-slate-900">
+          <button
+            type="button"
+            onClick={() => setMobileView('editor')}
+            className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition ${mobileView === 'editor'
+                ? 'bg-[#C52133] text-white'
+                : 'bg-gray-100 text-gray-700 dark:bg-slate-800 dark:text-slate-200'
+              }`}
+          >
+            រៀបចំធៀបអញ្ជើញ
+          </button>
+          <button
+            type="button"
+            onClick={() => setMobileView('preview')}
+            className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition ${mobileView === 'preview'
+                ? 'bg-[#C52133] text-white'
+                : 'bg-gray-100 text-gray-700 dark:bg-slate-800 dark:text-slate-200'
+              }`}
+          >
+            មើល Preview
+          </button>
+        </div>
+        <div className="h-[calc(100%-60px)] overflow-hidden">
+          {mobileView === 'editor' ? editorPanel : previewPanel}
+        </div>
+      </div>
+
+      <div className="hidden h-full md:block">
+        <ResizableSplitLayout
+          leftPanel={editorPanel}
+          rightPanel={previewPanel}
+          defaultLeftWidth={52.5}
+          minLeftWidth={300}
+          minRightWidth={350}
+        />
+      </div>
     </section>
   );
 }

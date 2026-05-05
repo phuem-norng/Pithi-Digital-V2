@@ -2,6 +2,9 @@
 
 import { useSearchParams } from 'next/navigation';
 import type { BuilderState } from '../types';
+import { Assets } from '@/lib/assets';
+import { FLORAL_ROSE_WEDDING_TEMPLATE_ID } from '@/lib/template-style';
+import { cn } from '@/lib/utils';
 
 type ImageCoverProps = {
 	data: BuilderState;
@@ -139,28 +142,18 @@ function pickDisplayNames(eventTitle: string, eventSubtitle: string, language: B
 		.replace('សិរីមង្គលអាពាហ៍ពិពាហ៍', '')
 		.trim();
 
+	// Keep a shared separator token so splitCoupleNames can still detect
+	// groom/bride names after language-specific character filtering.
+	const normalizedSeparators = cleaned
+		.replace(/\s+និង\s+/gu, ' & ')
+		.replace(/\s+and\s+/giu, ' & ');
+
 	if (!cleaned) {
 		return language === 'en' ? 'Bride & Groom' : 'កូនកំលោះ និង កូនក្រមុំ';
 	}
 
-	const khmerOnly = cleaned
-		.replace(/[A-Za-z0-9]/g, '')
-		.replace(/\s+/g, ' ')
-		.trim();
-
-	const englishOnly = cleaned
-		.replace(/[\u1780-\u17FF]/g, '')
-		.replace(/\s+/g, ' ')
-		.trim();
-
-	const invalidKhmerOnly = khmerOnly === '' || khmerOnly === 'និង';
-	const invalidEnglishOnly = englishOnly === '' || /^and$/i.test(englishOnly);
-
-	if (language === 'en') {
-		return invalidEnglishOnly ? cleaned : englishOnly;
-	}
-
-	return invalidKhmerOnly ? cleaned : khmerOnly;
+	// Keep names identical across languages; only labels should be translated.
+	return normalizedSeparators.replace(/\s+/g, ' ').trim();
 }
 
 function splitCoupleNames(displayNames: string) {
@@ -171,7 +164,12 @@ function splitCoupleNames(displayNames: string) {
 
 	const parts = normalized
 		.split(/\s*(?:និង|&|and)\s*/i)
-		.map((part) => part.trim())
+		.map((part) =>
+			part
+				// Remove accidental decorative hearts from source text to avoid duplicate hearts in UI.
+				.replace(/[❤♡♥️💖💗💘💝💞💓💟]/gu, '')
+				.trim(),
+		)
 		.filter(Boolean);
 
 	if (parts.length < 2) {
@@ -184,19 +182,37 @@ function splitCoupleNames(displayNames: string) {
 	};
 }
 
+function stripHeartDecorations(value: string) {
+	return value.replace(/[❤♡♥️♥💖💗💘💝💞💓💟]/gu, '').replace(/\s+/g, ' ').trim();
+}
+
 export default function ImageCover({ data }: ImageCoverProps) {
 	const searchParams = useSearchParams();
 	const guestName = searchParams.get('g') || 'ឈ្មោះភ្ញៀវកិត្តិយស';
-	const names = pickDisplayNames(data.eventTitle || '', data.eventSubtitle || '', data.language);
+	const names = stripHeartDecorations(pickDisplayNames(data.eventTitle || '', data.eventSubtitle || '', data.language));
 	const coupleNames = splitCoupleNames(names);
-	const showCeremonyTitle = data.language === 'km';
+	const ceremonyTitle = data.language === 'en' ? 'Wedding celebration' : 'សិរីមង្គលអាពាហ៍ពិពាហ៍';
 	const invitationText = data.language === 'en' ? 'You are cordially invited' : 'សូមគោរពអញ្ជើញ';
-	const dateLabel = data.language === 'en' ? 'Date & Time' : 'កាលបរិច្ឆេទ និង ម៉ោង';
-	const locationLabel = data.language === 'en' ? 'Location' : 'ទីតាំង';
-	const khmerDateText = data.eventDate ? formatKhmerCeremonyDate(data.eventDate) : '';
+	const ceremonyDateLabel = data.language === 'en' ? 'Ceremony date:' : 'កាលបរិច្ឆេទពិធី:';
+	const eventDateDisplay = data.eventDate;
+
+	const isFloralRoseShowcaseCover = data.templateId === FLORAL_ROSE_WEDDING_TEMPLATE_ID;
+	/** Cover text color for Floral Rose showcase (title, names, invite line, guest). */
+	const showcaseGold = {
+		main: data.textColor || '#e6c628',
+		heart: data.headingColor || '#ffb347',
+		/** Soft black hugging the glyphs (not a heavy halo). */
+		shadow: '0 1px 1px rgba(0, 0, 0, 0.22), 0 2px 5px rgba(0, 0, 0, 0.12)',
+	} as const;
+	const showcaseDateColor = data.headingColor || '#5E3A26';
 
 	return (
-		<section className="relative h-160 w-full overflow-hidden rounded-t-[32px] bg-black/10">
+		<section
+			className={cn(
+				'relative h-160 w-full overflow-hidden rounded-t-[32px]',
+				isFloralRoseShowcaseCover ? 'bg-[#eecfaf]' : 'bg-black/10',
+			)}
+		>
 			{data.coverImageUrl ? (
 				<img
 					src={data.coverImageUrl}
@@ -204,54 +220,114 @@ export default function ImageCover({ data }: ImageCoverProps) {
 					className="h-full w-full object-cover object-top scale-105"
 				/>
 			) : (
-				<div className="h-full w-full bg-linear-to-b from-[#c8a56c] via-[#9a6f3f] to-[#5f3f23]" />
+				<div
+					className={
+						isFloralRoseShowcaseCover
+							? 'h-full w-full bg-linear-to-b from-[#f8ebd8] via-[#eecfaf] to-[#e2c29a]'
+							: 'h-full w-full bg-linear-to-b from-[#c8a56c] via-[#9a6f3f] to-[#5f3f23]'
+					}
+				/>
 			)}
 
-			<div className="absolute inset-0 bg-linear-to-b from-black/30 via-black/45 to-black/65" />
+			<div
+				className={
+					isFloralRoseShowcaseCover
+						? 'absolute inset-0 bg-linear-to-b from-white/30 via-[#5e3a26]/12 to-[#eecfaf]/95'
+						: 'absolute inset-0 bg-linear-to-b from-black/30 via-black/45 to-black/65'
+				}
+			/>
 
-			<div className="absolute inset-0 mx-auto flex max-w-85 flex-col items-center px-5 pb-9 pt-10 text-center sm:max-w-105 sm:px-8 sm:pb-12" style={{ color: data.textColor }}>
-				{showCeremonyTitle && (
-					<p className="font-khmer-heading text-[1.45rem] font-bold leading-tight tracking-wide sm:text-[1.7rem]">
-						សិរីមង្គលអាពាហ៍ពិពាហ៍
+			<div
+				className="absolute inset-0 mx-auto flex max-w-85 flex-col items-center px-5 pb-9 pt-10 text-center sm:max-w-105 sm:px-8 sm:pb-12"
+				style={
+					isFloralRoseShowcaseCover
+						? { color: showcaseGold.main, textShadow: showcaseGold.shadow }
+						: { color: data.textColor }
+				}
+			>
+				<div className="flex w-full flex-col items-center">
+					<p className="w-full text-center font-khmer-heading text-[1.45rem] font-bold leading-tight tracking-wide sm:text-[1.7rem]">
+						{ceremonyTitle}
 					</p>
-				)}
-				{showCeremonyTitle && (
 					<img
-						src="/underline-kbach-1.png"
+						src={Assets.underlineKbach}
 						alt=""
 						aria-hidden="true"
-						className="mt-1.5 w-24 object-contain opacity-80 sm:w-32"
+						className={cn(
+							'mt-1.5 block h-auto w-24 max-w-full shrink-0 object-contain sm:w-32',
+							isFloralRoseShowcaseCover ? 'opacity-95 [filter:sepia(0.35)_saturate(1.2)_hue-rotate(-8deg)]' : 'opacity-80',
+						)}
 					/>
-				)}
-				<p className={`${showCeremonyTitle ? 'mt-2' : 'mt-6'} font-khmer-heading text-[0.95rem] font-semibold leading-tight tracking-[0.02em] sm:text-[1.1rem]`}>
-					{coupleNames ? (
-						<span className="inline-flex items-center gap-2 sm:gap-3">
-							<span>{coupleNames.left}</span>
-							<span aria-hidden="true" className="text-[0.82em] text-[#ffb347]">❤</span>
-							<span>{coupleNames.right}</span>
-						</span>
-					) : (
-						names
-					)}
-				</p>
+					<p
+						className={cn(
+							'mt-2 w-full max-w-md font-khmer-heading text-[0.95rem] font-semibold leading-tight tracking-[0.02em] sm:text-[1.1rem]',
+							coupleNames
+								? 'grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-x-2 sm:gap-x-3'
+								: 'text-center',
+						)}
+					>
+						{coupleNames ? (
+							<>
+								<span className="min-w-0 truncate text-end">{coupleNames.left}</span>
+								<span
+									aria-hidden="true"
+									className={cn(
+										'justify-self-center text-[0.9em] leading-none',
+										!isFloralRoseShowcaseCover && 'text-[#ffb347]',
+									)}
+									style={
+										isFloralRoseShowcaseCover
+											? {
+												color: showcaseGold.heart,
+												textShadow: showcaseGold.shadow,
+												fontVariantEmoji: 'text',
+											}
+											: undefined
+									}
+								>
+									{'\u2665\uFE0E'}
+								</span>
+								<span className="min-w-0 truncate text-start">{coupleNames.right}</span>
+							</>
+						) : (
+							names
+						)}
+					</p>
+				</div>
 
 				<button
 					type="button"
-					className={`${data.language === 'km' ? 'mt-5 relative top-24 text-base sm:text-lg font-khmer-heading' : 'mt-5 text-[0.84rem] font-khmer-body'} px-1 py-0 font-medium tracking-wide text-current`}
+					className="relative top-20 mt-4 px-1 py-0 font-khmer-heading text-base font-medium tracking-wide text-current sm:text-lg"
+					style={isFloralRoseShowcaseCover ? { color: showcaseGold.main, textShadow: showcaseGold.shadow } : undefined}
 				>
 					{invitationText}
 				</button>
 
-				<div className="relative -mt-9 flex flex-col items-center justify-center">
-					<img src="/frame.png" alt="badge-frame" className="h-auto w-64 object-contain sm:w-72" />
-					<div className={`${data.language === 'km' ? 'font-khmer-heading text-base sm:text-lg' : 'font-khmer-body text-[0.95rem] sm:text-base'} absolute rounded-full px-4 py-1.5 font-semibold whitespace-nowrap`}>
+				<div className="relative -mt-16 flex flex-col items-center justify-center">
+					<img src={Assets.guestNameFrame} alt="" aria-hidden="true" className="h-auto w-64 object-contain sm:w-72" />
+					<div
+						className="absolute translate-y-1.5 rounded-full px-4 py-1.5 font-khmer-heading text-base font-semibold whitespace-nowrap sm:translate-y-2 sm:text-lg"
+						style={isFloralRoseShowcaseCover ? { color: showcaseGold.main, textShadow: showcaseGold.shadow } : undefined}
+					>
 						<span>{guestName}</span>
 					</div>
 				</div>
 
-				{data.language === 'km' && data.eventDate && (
-					<p className="absolute bottom-3 left-1/2 z-10 w-[92%] -translate-x-1/2 rounded-md bg-black/30 px-2 py-1 text-center font-khmer-body text-xs text-current sm:bottom-4 sm:w-auto sm:px-3">
-						កាលបរិច្ឆេទពិធី: {khmerDateText}
+				{data.eventDate && (
+					<p
+						className={cn(
+							'absolute bottom-3 left-1/2 z-10 w-[92%] -translate-x-1/2 px-2 py-1 text-center font-khmer-body text-xs sm:bottom-4 sm:w-auto sm:px-3',
+							isFloralRoseShowcaseCover
+								? ''
+								: 'text-current',
+						)}
+						style={
+							isFloralRoseShowcaseCover
+								? { color: showcaseDateColor, textShadow: showcaseGold.shadow }
+								: undefined
+						}
+					>
+						{ceremonyDateLabel} {eventDateDisplay}
 					</p>
 				)}
 			</div>

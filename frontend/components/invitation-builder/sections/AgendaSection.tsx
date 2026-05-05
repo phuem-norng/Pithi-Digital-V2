@@ -6,6 +6,7 @@ import type { AgendaItem, AgendaSection as AgendaSectionType } from '../types';
 
 type AgendaSectionProps = {
   sections: AgendaSectionType[];
+  lang: 'km' | 'en';
   onAddSection: () => void;
   onUpdateSection: (sectionId: string, updates: Partial<AgendaSectionType>) => void;
   onRemoveSection: (sectionId: string) => void;
@@ -16,6 +17,7 @@ type AgendaSectionProps = {
 
 export default function AgendaSection({
   sections,
+  lang,
   onAddSection,
   onUpdateSection,
   onRemoveSection,
@@ -23,59 +25,60 @@ export default function AgendaSection({
   onUpdateItem,
   onRemoveItem,
 }: AgendaSectionProps) {
+  const isKm = lang === 'km';
   return (
     <div className="space-y-5">
-      <p className="text-sm font-semibold text-gray-700">
-        {sections.length} របៀបវារៈ
+      <p className="text-sm font-semibold text-gray-700 dark:text-white">
+        {isKm ? `${sections.length} របៀបវារៈ` : `${sections.length} agenda sections`}
       </p>
 
       {sections.map((section) => (
-        <div key={section.id} className="space-y-3 rounded-2xl border border-gray-100 bg-white p-4">
+        <div key={section.id} className="space-y-3 rounded-2xl border border-gray-100 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-3">
-              <p className="text-sm font-semibold text-gray-800">ឈ្មោះរបៀបវារៈ*</p>
+              <p className="text-sm font-semibold text-gray-800 dark:text-slate-200">{isKm ? 'ឈ្មោះរបៀបវារៈ*' : 'Section title*'}</p>
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 onClick={() => onRemoveSection(section.id)}
               >
-                លុបរបៀបវារៈ
+                {isKm ? 'លុបរបៀបវារៈ' : 'Remove section'}
               </Button>
             </div>
             <Input
-              placeholder="របៀបវារៈទី1"
+              placeholder={isKm ? 'របៀបវារៈទី1' : 'Agenda section 1'}
               value={section.title}
               onChange={(event) => onUpdateSection(section.id, { title: event.target.value })}
             />
           </div>
 
           {section.items.map((item) => (
-            <div key={item.id} className="space-y-2 rounded-xl border border-gray-100 bg-gray-50 p-3">
+            <div key={item.id} className="space-y-2 rounded-xl border border-gray-100 bg-gray-50 p-3 dark:border-slate-700 dark:bg-slate-800">
               <div className="flex items-center justify-between gap-3">
-                <p className="text-sm font-medium text-gray-700">កម្មវិធី</p>
+                <p className="text-sm font-medium text-gray-700 dark:text-slate-300">{isKm ? 'កម្មវិធី' : 'Item'}</p>
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
                   onClick={() => onRemoveItem(section.id, item.id)}
                 >
-                  លុប
+                  {isKm ? 'លុប' : 'Remove'}
                 </Button>
               </div>
               <Input
-                placeholder="ឈ្មោះកម្មវិធី"
+                placeholder={isKm ? 'ឈ្មោះកម្មវិធី' : 'Item title'}
                 value={item.title}
                 onChange={(event) => onUpdateItem(section.id, item.id, { title: event.target.value })}
               />
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 <Input
-                  placeholder="កាលបរិច្ឆេទ"
+                  placeholder={isKm ? 'កាលបរិច្ឆេទ' : 'Date'}
                   value={item.date}
                   onChange={(event) => onUpdateItem(section.id, item.id, { date: event.target.value })}
                 />
                 <Input
-                  placeholder="ម៉ោង"
+                  placeholder={isKm ? 'ម៉ោង' : 'Time'}
                   value={item.time}
                   onChange={(event) => onUpdateItem(section.id, item.id, { time: event.target.value })}
                 />
@@ -83,14 +86,14 @@ export default function AgendaSection({
             </div>
           ))}
 
-          <Button type="button" variant="outline" className="w-full" onClick={() => onAddItem(section.id)}>
-            + បន្ថែមកម្មវិធី
+          <Button type="button" variant="outline" className="w-full dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700" onClick={() => onAddItem(section.id)}>
+            {isKm ? '+ បន្ថែមកម្មវិធី' : '+ Add item'}
           </Button>
         </div>
       ))}
 
       <Button type="button" variant="outline" className="w-full" onClick={onAddSection}>
-        + បន្ថែមរបៀបវារៈកម្មវិធី
+        {isKm ? '+ បន្ថែមរបៀបវារៈកម្មវិធី' : '+ Add agenda section'}
       </Button>
     </div>
   );

@@ -100,20 +100,22 @@ export class EventsService {
   }
 
   async findByUser(userId: string, skip = 0, take = 10) {
-    return this.prisma.event.findMany({
-      where: { userId },
-      skip,
-      take,
-      include: {
-        guests: true,
-        eventType: true,
-        template: true,
-        _count: {
-          select: { guests: true },
+    return this.withPrismaPoolRetry(() =>
+      this.prisma.event.findMany({
+        where: { userId },
+        skip,
+        take,
+        include: {
+          guests: true,
+          eventType: true,
+          template: true,
+          _count: {
+            select: { guests: true },
+          },
         },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+        orderBy: { createdAt: 'desc' },
+      }),
+    );
   }
 
   async findById(eventId: string) {
@@ -506,5 +508,33 @@ export class EventsService {
         `;
       }
     });
+  }
+
+  private async withPrismaPoolRetry<T>(
+    operation: () => Promise<T>,
+    retries = 2,
+    delayMs = 250,
+  ): Promise<T> {
+    let lastError: unknown;
+
+    for (let attempt = 0; attempt <= retries; attempt += 1) {
+      try {
+        return await operation();
+      } catch (error) {
+        lastError = error;
+        const code =
+          error instanceof Prisma.PrismaClientKnownRequestError
+            ? error.code
+            : undefined;
+
+        if (code !== 'P2024' || attempt === retries) {
+          throw error;
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, delayMs * (attempt + 1)));
+      }
+    }
+
+    throw lastError;
   }
 }

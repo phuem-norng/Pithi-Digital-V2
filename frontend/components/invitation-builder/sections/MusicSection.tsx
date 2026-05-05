@@ -9,13 +9,15 @@ const getMusicById = (options: MusicOption[], id: string) =>
 
 type MusicSectionProps = {
   musicOptions: MusicOption[];
+  lang: 'km' | 'en';
   musicEnabled: boolean;
   musicId: string;
   musicUrl: string;
   onChange: (updates: Partial<BuilderState>) => void;
 };
 
-export default function MusicSection({ musicOptions, musicEnabled, musicId, musicUrl, onChange }: MusicSectionProps) {
+export default function MusicSection({ musicOptions, lang, musicEnabled, musicId, musicUrl, onChange }: MusicSectionProps) {
+  const isKm = lang === 'km';
   const handleSelect = (value: string | null) => {
     if (!value) return;
     const option = getMusicById(musicOptions, value);
@@ -25,7 +27,7 @@ export default function MusicSection({ musicOptions, musicEnabled, musicId, musi
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <span className="text-sm font-semibold text-gray-700">Music</span>
+        <span className="text-sm font-semibold text-gray-700 dark:text-white">{isKm ? 'តន្ត្រី' : 'Music'}</span>
         <button
           type="button"
           onClick={() => onChange({ musicEnabled: !musicEnabled })}
@@ -40,7 +42,9 @@ export default function MusicSection({ musicOptions, musicEnabled, musicId, musi
 
       <Select value={musicId} onValueChange={handleSelect}>
         <SelectTrigger className="w-full">
-          <SelectValue placeholder="Select music" />
+          <SelectValue placeholder={isKm ? 'ជ្រើសបទតន្ត្រី' : 'Select music'}>
+            {getMusicById(musicOptions, musicId)?.label || (isKm ? 'ជ្រើសបទតន្ត្រី' : 'Select music')}
+          </SelectValue>
         </SelectTrigger>
         <SelectContent>
           {musicOptions.map((option) => (
@@ -59,7 +63,7 @@ export default function MusicSection({ musicOptions, musicEnabled, musicId, musi
         className="w-full"
         onClick={() => onChange({ musicUrl: '', musicId: '' })}
       >
-        Remove music
+        {isKm ? 'លុបតន្ត្រី' : 'Remove music'}
       </Button>
     </div>
   );

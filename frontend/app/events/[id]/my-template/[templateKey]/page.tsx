@@ -3,19 +3,25 @@
 export const dynamic = 'force-dynamic';
 
 import Link from 'next/link';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowLeft, Eye, Mail, Pause, Play } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { SupportContactFab } from '@/components/support-contact-fab';
+import { Assets, getSeededCoverImage, getSeededGalleryImages } from '@/lib/assets';
 import InvitationCard from '@/components/invitation-builder/InvitationCard';
-import type { BuilderState } from '@/components/invitation-builder/types';
+import type { BuilderState, Language } from '@/components/invitation-builder/types';
 import { apiClient } from '@/lib/api-client';
 import { getSavedMyTemplateById } from '@/lib/my-templates';
+import { getEventTemplateCatalogImage } from '@/lib/template-images';
+import { getTemplateStyleDefaults } from '@/lib/template-style';
+import { useLanguage } from '@/lib/language-context';
+import { getEventDetailPageStrings } from '@/lib/event-detail-page-i18n';
 
-function formatBuilderEventDate(rawDate?: string) {
+function formatBuilderEventDate(rawDate: string | undefined, emptyLabel: string) {
   if (!rawDate) {
-    return 'ថ្ងៃរៀបអាពាហ៍ពិពាហ៍';
+    return emptyLabel;
   }
 
   const parsed = new Date(rawDate);
@@ -52,18 +58,53 @@ function formatBuilderDateOnly(rawDate?: string) {
   return `${day}/${month}/${year}`;
 }
 
-function createBuilderStateFromEvent(event: {
-  title?: string;
-  date?: string;
-  location?: string;
-  musicUrl?: string;
-  coverImage?: string;
-  googleMapLink?: string;
-  khqrDollar?: string;
-  khqrRiel?: string;
-  metadata?: Record<string, unknown>;
-}): BuilderState {
+const LOCAL_TO_R2: Record<string, string> = {
+  '/GlfpFt.jpg': Assets.heroBackground,
+  '/map.png': Assets.map,
+  '/decorative-divider.png': Assets.decorativeDivider,
+  '/frame.png': Assets.frame,
+  '/underline-kbach-1.png': Assets.underlineKbach,
+  '/badge-frame.svg': Assets.badgeFrame,
+};
+
+function migrateLocalPath(url: string | undefined): string | undefined {
+  if (!url) return url;
+  return LOCAL_TO_R2[url] ?? url;
+}
+
+function migrateBuilderState(state: BuilderState): BuilderState {
+  return {
+    ...state,
+    backgroundUrl: migrateLocalPath(state.backgroundUrl) ?? state.backgroundUrl,
+    mapImageUrl: migrateLocalPath(state.mapImageUrl) ?? state.mapImageUrl,
+  };
+}
+
+function createBuilderStateFromEvent(
+  event: {
+    title?: string;
+    date?: string;
+    location?: string;
+    musicUrl?: string;
+    coverImage?: string;
+    templateId?: string;
+    template?: {
+      id?: string;
+      thumbnail?: string;
+      previewUrl?: string;
+    };
+    googleMapLink?: string;
+    khqrDollar?: string;
+    khqrRiel?: string;
+    metadata?: Record<string, unknown>;
+  },
+  builderLanguage: Language = 'km',
+): BuilderState {
   const dateOnly = formatBuilderDateOnly(event.date);
+  const i18n = getEventDetailPageStrings(builderLanguage === 'km');
+  const bd = i18n.builderDefaults;
+  const seed = i18n.invitationSeed;
+  const defaultDate = formatBuilderEventDate(event.date, bd.weddingDay);
   const metadata = event.metadata && typeof event.metadata === 'object'
     ? (event.metadata as { agenda?: unknown; eventEndDate?: unknown })
     : undefined;
@@ -71,43 +112,72 @@ function createBuilderStateFromEvent(event: {
   const agenda = Array.isArray(metadata?.agenda) && metadata?.agenda.length > 0
     ? metadata.agenda
     : [
-        {
-          id: `agenda-${Date.now()}`,
-          title: 'របៀបវារៈទី1',
-          items: [{ id: `agenda-item-${Date.now()}`, title: '', date: dateOnly, time: '' }],
-        },
-      ];
+      {
+        id: `agenda-${Date.now()}`,
+        title: bd.agendaSection,
+        items: [{ id: `agenda-item-${Date.now()}`, title: '', date: dateOnly, time: '' }],
+      },
+    ];
+
+  const templateImage = getEventTemplateCatalogImage(event);
+  const styleDefaults = getTemplateStyleDefaults(event.template);
+
+  const galleryFromMetadata =
+    event.metadata && typeof event.metadata === 'object' && !Array.isArray(event.metadata)
+      ? (
+        [event.metadata.galleryImages, event.metadata.uploadedImages, event.metadata.images]
+          .flatMap((entry) => (Array.isArray(entry) ? entry : []))
+          .filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
+          .map((entry) => entry.trim())
+      )
+      : [];
+  const galleryImages = galleryFromMetadata.length > 0
+    ? [...new Set(galleryFromMetadata)]
+    : getSeededGalleryImages(event.templateId || event.template?.id || event.title || event.date || '');
 
   return {
-    language: 'km',
+    styleVariant: styleDefaults.styleVariant as BuilderState['styleVariant'],
+    templateId: event.templateId || event.template?.id,
+    language: builderLanguage,
     musicEnabled: true,
     musicId: 'classic',
-    musicUrl: event.musicUrl || '/audio/wedding.mp3',
-    textColor: '#e6c628',
-    headingColor: '#142e7b',
-    coverImageUrl: event.coverImage || '',
-    backgroundUrl: '/GlfpFt.jpg',
-    eventTitle: event.title || 'សិរីមង្គលអាពាហ៍ពិពាហ៍',
+    musicUrl: event.musicUrl || Assets.weddingMusic,
+    textColor: styleDefaults.textColor,
+    headingColor: styleDefaults.headingColor,
+    coverImageUrl: templateImage || getSeededCoverImage(event.templateId || event.template?.id || event.title || event.date || ''),
+    backgroundUrl: styleDefaults.backgroundUrl,
+    eventTitle: event.title || bd.eventTitle,
     eventSubtitle: '',
-    eventDate: formatBuilderEventDate(event.date),
+    eventDate: defaultDate,
     eventEndDate:
       typeof metadata?.eventEndDate === 'string' && metadata.eventEndDate.trim()
         ? metadata.eventEndDate
-        : formatBuilderEventDate(event.date),
-    eventLocation: event.location || 'ទីតាំងកម្មវិធី',
-    greetingTitle: 'យើងខ្ញុំមានកិត្តិយសសូមគោរពអញ្ជើញ',
-    greetingMessage:
-      'សម្តេច ទ្រង់ ឯកឧត្តម លោកជំទាវ លោកអ្នកឧកញ៉ា អ្នកឧកញ៉ា ឧកញ៉ា លោក លោកស្រី អ្នកនាង កញ្ញា ព្រមទាំងប្រិយមិត្តអញ្ជើញចូលរួមជាអធិបតី និងជាភ្ញៀវកិត្តិយស ដើម្បីប្រសិទ្ធិពរជ័យសិរីសួស្តី ជ័យមង្គល ក្នុងពិធីអាពាហ៍ពិពាហ៍ កូនប្រុសស្រី របស់យើងខ្ញុំទាំងពីរ។',
+        : defaultDate,
+    eventLocation: event.location || bd.eventLocation,
+    greetingTitle: seed.greetingTitle,
+    greetingMessage: seed.greetingMessage,
     agendaSections: agenda as BuilderState['agendaSections'],
     mapUrl: event.googleMapLink || '',
-    mapImageUrl: '/map.png',
-    galleryImages: [],
-    thankYouTitle: 'សូមអរគុណ និងសូមអភ័យទោស',
-    thankYouMessage:
-      'យើងខ្ញុំទាំងពីរ សូមថ្លែងអំណរគុណ យ៉ាងជ្រាលជ្រៅ ចំពោះវត្តមាន ដ៏ឧត្តុង្គឧត្តមរបស់ សម្តេច ឯកឧត្តម លោកជំទាវ លោកអ្នកឧកញ៉ា អ្នកឧកញ៉ា ឧកញ៉ា លោក លោកស្រី អ្នកនាង កញ្ញា ដែលបាន អញ្ជើញចូលរួមជាកិត្តិយស ក្នុងពិធីសិរីសួស្តីអាពាហ៍ពិពាហ៍ របស់យើងខ្ញុំ នាពេលខាងមុខនេះ។ យើងខ្ញុំសូមការខន្តីអភ័យទោស ដែលពុំបានជូនលិខិតអញ្ជើញ ដោយផ្ទាល់ ។ ដោយការវកិច្ចដ៏ខ្ពង់ខ្ពស់ពីយើងខ្ញុំ។',
-    khqrUsdUrl: event.khqrDollar || '',
-    khqrKhrUrl: event.khqrRiel || '',
+    mapImageUrl: Assets.map,
+    galleryImages,
+    thankYouTitle: seed.thankYouTitle,
+    thankYouMessage: seed.thankYouMessage,
+    khqrUsdUrl: event.khqrDollar || Assets.khqrSampleAbaPay,
+    khqrKhrUrl: event.khqrRiel || Assets.khqrSampleAbaPay,
   };
+}
+
+function stripWeddingTitlePrefixForCard(title: string, isKhmer: boolean) {
+  const t = title.trim();
+  if (!t) {
+    return t;
+  }
+  if (isKhmer) {
+    return t.replace(/^ពិធីរៀបមង្គលការ\s*/u, '').trim();
+  }
+  return t
+    .replace(/^(Wedding of|Wedding celebration|Our event)\s+/i, '')
+    .trim() || t;
 }
 
 export default function MyTemplatePreviewPage() {
@@ -119,6 +189,8 @@ export default function MyTemplatePreviewPage() {
   const invitedGuestName = searchParams.get('g') || '';
   const inviteSignature = `${invitedGuestId}::${invitedGuestName}`;
   const isGuestPreview = Boolean(invitedGuestId);
+
+  const { language } = useLanguage();
 
   const getRsvpStorageKey = () => {
     if (invitedGuestId) {
@@ -165,6 +237,14 @@ export default function MyTemplatePreviewPage() {
   const [adultCount, setAdultCount] = useState(1);
   const [rsvpNotice, setRsvpNotice] = useState('');
   const [isSubmittingRsvp, setIsSubmittingRsvp] = useState(false);
+  const templateLanguage: Language =
+    builderState?.language === 'en' || builderState?.language === 'km'
+      ? builderState.language
+      : language === 'km'
+        ? 'km'
+        : 'en';
+  const isKhmer = templateLanguage === 'km';
+  const S = useMemo(() => getEventDetailPageStrings(isKhmer), [isKhmer]);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const autoPlayRetryCountRef = useRef(0);
   const petals = Array.from({ length: 24 }, (_, index) => ({
@@ -208,10 +288,21 @@ export default function MyTemplatePreviewPage() {
     const loadTemplate = async () => {
       const saved = getSavedMyTemplateById(templateKey);
       const hasSavedTemplate = Boolean(saved?.builderState);
+      const preferredLanguage: Language =
+        saved?.builderState?.language === 'en' || saved?.builderState?.language === 'km'
+          ? saved.builderState.language
+          : language === 'km'
+            ? 'km'
+            : 'en';
+      const loc = getEventDetailPageStrings(preferredLanguage === 'km');
+      const previewStrings = loc.myTemplatePreview;
 
       if (saved?.builderState) {
         if (!active) return;
-        setBuilderState(saved.builderState);
+        setBuilderState({
+          ...migrateBuilderState(saved.builderState),
+          templateId: saved.builderState.templateId || saved.templateId,
+        });
         setTemplateName(saved.name);
       }
 
@@ -229,6 +320,23 @@ export default function MyTemplatePreviewPage() {
         }
         if (!active) return;
         setPublicEventSlug(event.slug || '');
+
+        if (hasSavedTemplate && saved?.builderState) {
+          const savedState = saved.builderState;
+          setBuilderState((prev) => {
+            const tid = event.templateId || event.template?.id;
+            const base: BuilderState =
+              prev ??
+              {
+                ...migrateBuilderState(savedState),
+                templateId: savedState.templateId || saved.templateId,
+              };
+            if (base.templateId) {
+              return base;
+            }
+            return tid ? { ...base, templateId: tid } : base;
+          });
+        }
 
         const cached = loadSavedRsvp();
         if (cached) {
@@ -248,7 +356,7 @@ export default function MyTemplatePreviewPage() {
         } else {
           const guestDisplayName = decodeURIComponent(invitedGuestName || '').trim();
           if (guestDisplayName) {
-            setWishMessage(`${guestDisplayName}៖ `);
+            setWishMessage(`${guestDisplayName}${loc.myTemplatePreview.nameColon}`);
           }
         }
 
@@ -273,9 +381,9 @@ export default function MyTemplatePreviewPage() {
               } else {
                 setSentAt(Date.now());
               }
-              setRsvpNotice('បានផ្ញើសារជូនពរ និងបច្ចុប្បន្នភាពស្ថានភាពរួចរាល់។');
+              setRsvpNotice(loc.myTemplatePreview.rsvpSentGreeting);
             } else if (invitedGuest.rsvpStatus === 'CONFIRMED' || invitedGuest.rsvpStatus === 'DECLINED') {
-              setRsvpNotice('បានផ្ញើបច្ចុប្បន្នភាពស្ថានភាពរួចរាល់។');
+              setRsvpNotice(loc.myTemplatePreview.rsvpStatusOnly);
             }
 
             if (typeof window !== 'undefined') {
@@ -312,17 +420,27 @@ export default function MyTemplatePreviewPage() {
             ? (metadata.myTemplateSnapshots as Record<string, unknown>)
             : {};
 
-        const exact = snapshots[templateKey] as { name?: unknown; builderState?: unknown } | undefined;
+        const exact = snapshots[templateKey] as {
+          name?: unknown;
+          templateId?: unknown;
+          builderState?: unknown;
+        } | undefined;
 
         if (!hasSavedTemplate && exact && exact.builderState && typeof exact.builderState === 'object') {
           if (!active) return;
-          setBuilderState(exact.builderState as BuilderState);
-          setTemplateName(typeof exact.name === 'string' ? exact.name : 'គំរូធៀបខ្ញុំ');
+          const fromSnap = exact.builderState as BuilderState;
+          const tid =
+            (typeof fromSnap.templateId === 'string' && fromSnap.templateId) ||
+            (typeof exact.templateId === 'string' && exact.templateId) ||
+            event.templateId ||
+            event.template?.id;
+          setBuilderState({ ...fromSnap, templateId: tid });
+          setTemplateName(typeof exact.name === 'string' ? exact.name : previewStrings.defaultTemplateName);
           return;
         }
 
         const latest = Object.values(snapshots)
-          .map((item) => item as { updatedAt?: unknown; name?: unknown; builderState?: unknown })
+          .map((item) => item as { updatedAt?: unknown; name?: unknown; templateId?: unknown; builderState?: unknown })
           .filter((item) => item && typeof item.builderState === 'object')
           .sort((a, b) => {
             const at = typeof a.updatedAt === 'string' ? a.updatedAt : '';
@@ -332,15 +450,21 @@ export default function MyTemplatePreviewPage() {
 
         if (!hasSavedTemplate && latest?.builderState && typeof latest.builderState === 'object') {
           if (!active) return;
-          setBuilderState(latest.builderState as BuilderState);
-          setTemplateName(typeof latest.name === 'string' ? latest.name : 'គំរូធៀបខ្ញុំ');
+          const fromSnap = latest.builderState as BuilderState;
+          const tid =
+            (typeof fromSnap.templateId === 'string' && fromSnap.templateId) ||
+            (typeof latest.templateId === 'string' && latest.templateId) ||
+            event.templateId ||
+            event.template?.id;
+          setBuilderState({ ...fromSnap, templateId: tid });
+          setTemplateName(typeof latest.name === 'string' ? latest.name : previewStrings.defaultTemplateName);
           return;
         }
 
         if (!hasSavedTemplate) {
           if (!active) return;
-          setBuilderState(createBuilderStateFromEvent(event));
-          setTemplateName(event.title || 'គំរូធៀបខ្ញុំ');
+          setBuilderState(createBuilderStateFromEvent(event, language === 'km' ? 'km' : 'en'));
+          setTemplateName(event.title || previewStrings.defaultTemplateName);
           return;
         }
       } catch {
@@ -358,10 +482,10 @@ export default function MyTemplatePreviewPage() {
     return () => {
       active = false;
     };
-  }, [templateKey, eventId, inviteSignature]);
+  }, [templateKey, eventId, inviteSignature, language]);
 
   const handleSubmitRsvpAndWish = async () => {
-    const fallbackName = decodeURIComponent(invitedGuestName || '').trim() || 'ភ្ញៀវកិត្តិយស';
+    const fallbackName = decodeURIComponent(invitedGuestName || '').trim() || S.guests.defaultGuestName;
 
     setIsSubmittingRsvp(true);
     setRsvpNotice('');
@@ -377,7 +501,7 @@ export default function MyTemplatePreviewPage() {
       }
 
       if (!slug) {
-        setRsvpNotice('បរាជ័យក្នុងការផ្ញើ។ សូមព្យាយាមម្តងទៀត។');
+        setRsvpNotice(S.myTemplatePreview.rsvpSendFail);
         return;
       }
 
@@ -411,9 +535,9 @@ export default function MyTemplatePreviewPage() {
         }
       }
 
-      setRsvpNotice('បានផ្ញើសារជូនពរ និងបច្ចុប្បន្នភាពស្ថានភាពរួចរាល់។');
+      setRsvpNotice(S.myTemplatePreview.rsvpSubmitOk);
     } catch {
-      setRsvpNotice('បរាជ័យក្នុងការផ្ញើ។ សូមព្យាយាមម្តងទៀត។');
+      setRsvpNotice(S.myTemplatePreview.rsvpSendFail);
     } finally {
       setIsSubmittingRsvp(false);
     }
@@ -581,14 +705,14 @@ export default function MyTemplatePreviewPage() {
 
   if (!builderState) {
     return (
-      <div className="min-h-screen bg-gray-50 font-khmer-body">
+      <div className="min-h-screen bg-gray-50 font-khmer-body dark:bg-slate-950 dark:text-slate-100">
         {!isGuestPreview ? (
-          <header className="border-b border-gray-100 bg-white">
-            <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
+          <header className="border-b border-gray-100 bg-white dark:border-slate-800 dark:bg-slate-900">
+            <div className="mx-auto flex max-w-5xl items-center px-4 py-4 sm:px-6 lg:px-8">
               <Link href={`/events/${eventId}?tab=my-template`}>
-                <Button variant="outline" className="border-gray-200">
+                <Button variant="outline" className="border-gray-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800">
                   <ArrowLeft className="mr-2 h-4 w-4" />
-                  ត្រឡប់
+                  {S.myTemplatePreview.back}
                 </Button>
               </Link>
             </div>
@@ -597,7 +721,7 @@ export default function MyTemplatePreviewPage() {
 
         <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
           <div className="rounded-2xl border border-dashed border-gray-200 bg-white p-8 text-center text-sm text-gray-500">
-            មិនមានទិន្នន័យ preview របស់គំរូនេះទេ។ សូមត្រឡប់ទៅ Invitation Builder ហើយរក្សាទុកម្តងទៀត។
+            {S.myTemplatePreview.noPreview}
           </div>
         </main>
       </div>
@@ -605,20 +729,22 @@ export default function MyTemplatePreviewPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#efe5d6] font-khmer-body">
+    <div className="min-h-screen bg-[#efe5d6] font-khmer-body dark:bg-slate-950 dark:text-slate-100">
       {!isGuestPreview ? (
-        <header className="border-b border-gray-100 bg-white">
-          <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6 lg:px-8">
-            <Link href={`/events/${eventId}?tab=my-template`}>
-              <Button variant="outline" className="border-gray-200">
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                ត្រឡប់
-              </Button>
-            </Link>
-
-            <div className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-gray-50 px-4 py-2 text-xs font-semibold text-gray-700">
-              <Eye className="h-4 w-4 text-gray-500" />
-              មើលគំរូផ្លូវការ: {templateName || 'គំរូធៀបខ្ញុំ'}
+        <header className="border-b border-gray-100 bg-white dark:border-slate-800 dark:bg-slate-900">
+          <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-3 px-4 py-4 sm:px-6 lg:px-8">
+            <div className="flex items-center gap-2">
+              <Link href={`/events/${eventId}?tab=my-template`}>
+                <Button variant="outline" className="border-gray-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800">
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  {S.myTemplatePreview.back}
+                </Button>
+              </Link>
+              <div className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-gray-50 px-4 py-2 text-xs font-semibold text-gray-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                <Eye className="h-4 w-4 text-gray-500 dark:text-slate-400" />
+                {S.myTemplatePreview.officialPreview}{' '}
+                {templateName || S.myTemplatePreview.defaultTemplateName}
+              </div>
             </div>
           </div>
         </header>
@@ -671,16 +797,17 @@ export default function MyTemplatePreviewPage() {
                 <div className="pointer-events-none absolute -left-10 -top-10 h-24 w-24 rounded-full border border-[#d8b26a]/35" />
 
                 <div className="text-[#7d1833]">
-                  <p className="font-khmer-heading text-2xl sm:text-3xl">សិរីមង្គលអាពាហ៏ពិពាហ៍</p>
+                  <p className="font-khmer-heading text-2xl sm:text-3xl">{S.myTemplatePreview.curtainTitle}</p>
                   <p className="mt-1 font-khmer-heading text-lg sm:text-2xl">
-                    {(builderState?.eventTitle || 'ឈ្មោះកូនកំលោះ & ឈ្មោះកូនក្រមុំ')
-                      .replace(/^ពិធីរៀបមង្គលការ\s*/u, '')
-                      .trim()}
+                    {stripWeddingTitlePrefixForCard(
+                      builderState?.eventTitle || S.myTemplatePreview.coupleLinePlaceholder,
+                      isKhmer,
+                    )}
                   </p>
-                  <p className="mt-1 font-khmer-body text-sm text-[#6f4b2d] sm:text-base">សូមគោរពអញ្ជើញ</p>
+                  <p className="mt-1 font-khmer-body text-sm text-[#6f4b2d] sm:text-base">{S.myTemplatePreview.respectfullyInvite}</p>
                 </div>
                 <div className="mx-auto mt-3 h-px w-40 bg-linear-to-r from-transparent via-[#d2a145] to-transparent" />
-                <p className="mt-3 text-sm leading-relaxed text-[#6f4b2d] font-khmer-body">សូមអញ្ជើញបើកធៀប និងអបអរពិធីមង្គលដោយក្តីសោមនស្ស</p>
+                <p className="mt-3 text-sm leading-relaxed text-[#6f4b2d] font-khmer-body">{S.myTemplatePreview.openInviteBlurb}</p>
                 <motion.button
                   type="button"
                   onClick={handleOpenInvitation}
@@ -690,7 +817,7 @@ export default function MyTemplatePreviewPage() {
                   transition={{ duration: 2, repeat: Number.POSITIVE_INFINITY, ease: 'easeInOut' }}
                 >
                   <Mail className="mr-2 h-4 w-4" />
-                  បើកធៀប
+                  {S.myTemplatePreview.openInvitation}
                 </motion.button>
               </motion.div>
 
@@ -826,6 +953,7 @@ export default function MyTemplatePreviewPage() {
           ) : null}
         </div>
       </main>
+      <SupportContactFab />
     </div>
   );
 }

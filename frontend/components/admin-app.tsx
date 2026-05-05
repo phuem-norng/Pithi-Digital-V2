@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ChevronLeft, ChevronRight, Copy, Download, MoreVertical, Pencil, Plus, QrCode, RefreshCw, Search, Send, Trash2, X } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { apiClient, Guest, User, Event } from '@/lib/api-client';
+import { apiClient, Guest, User, Event, SupportLink } from '@/lib/api-client';
 import { useAuth } from '@/lib/auth-context';
 import { withProtectedRoute } from '@/lib/protected-route';
 import { Button } from '@/components/ui/button';
@@ -95,6 +95,12 @@ function AdminAppBase({ activeMenu }: AdminAppProps) {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [supportLinks, setSupportLinks] = useState<SupportLink[]>([]);
+  const [isLoadingSupportLinks, setIsLoadingSupportLinks] = useState(false);
+  const [isSavingSupportLink, setIsSavingSupportLink] = useState(false);
+  const [newSupportLabel, setNewSupportLabel] = useState('');
+  const [newSupportUrl, setNewSupportUrl] = useState('');
+  const [newSupportPlatform, setNewSupportPlatform] = useState('telegram');
 
   useEffect(() => {
     if (!authLoading && user?.role !== 'ADMIN') {
@@ -184,6 +190,24 @@ function AdminAppBase({ activeMenu }: AdminAppProps) {
     }
   }, [events, newGuestEventId]);
 
+  useEffect(() => {
+    const loadSupportLinks = async () => {
+      if (activeMenu !== 'settings' || user?.role !== 'ADMIN') {
+        return;
+      }
+      setIsLoadingSupportLinks(true);
+      try {
+        const links = await apiClient.getSupportLinks();
+        setSupportLinks(links);
+      } catch (err: any) {
+        setError(err?.response?.data?.message || 'Failed to load support links');
+      } finally {
+        setIsLoadingSupportLinks(false);
+      }
+    };
+    void loadSupportLinks();
+  }, [activeMenu, user]);
+
   if (authLoading || user?.role !== 'ADMIN') {
     return null;
   }
@@ -194,6 +218,7 @@ function AdminAppBase({ activeMenu }: AdminAppProps) {
       'create-event': '/admin/events',
       'all-guests': '/admin/guests',
       users: '/admin/users',
+      music: '/admin/music',
       analytics: '/admin/analytics',
       settings: '/admin/settings',
       profile: '/admin/profile',
@@ -529,14 +554,14 @@ function AdminAppBase({ activeMenu }: AdminAppProps) {
             prev.map((guest) =>
               guest.id === editingGuestId
                 ? {
-                    ...guest,
-                    name,
-                    phone: phone || undefined,
-                    group: editGuestGroup,
-                    tag: editGuestTag,
-                    greetingMessage: editGuestGreetingMessage.trim() || '-',
-                    note: editGuestNote.trim() || '-',
-                  }
+                  ...guest,
+                  name,
+                  phone: phone || undefined,
+                  group: editGuestGroup,
+                  tag: editGuestTag,
+                  greetingMessage: editGuestGreetingMessage.trim() || '-',
+                  note: editGuestNote.trim() || '-',
+                }
                 : guest,
             ),
           );
@@ -554,13 +579,13 @@ function AdminAppBase({ activeMenu }: AdminAppProps) {
             prev.map((guest) =>
               guest.id === editingGuestId
                 ? {
-                    ...guest,
-                    ...updated,
-                    group: editGuestGroup,
-                    tag: editGuestTag,
-                    greetingMessage: editGuestGreetingMessage.trim() || '-',
-                    note: editGuestNote.trim() || '-',
-                  }
+                  ...guest,
+                  ...updated,
+                  group: editGuestGroup,
+                  tag: editGuestTag,
+                  greetingMessage: editGuestGreetingMessage.trim() || '-',
+                  note: editGuestNote.trim() || '-',
+                }
                 : guest,
             ),
           );
@@ -861,157 +886,157 @@ function AdminAppBase({ activeMenu }: AdminAppProps) {
         <div className="rounded-lg border border-gray-100 overflow-visible">
           <div className="max-h-[420px] overflow-auto rounded-lg">
             <table className="min-w-full table-auto text-sm">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="w-12 px-6 py-4 text-left">
-                  <input
-                    type="checkbox"
-                    checked={isAllOnPageSelected}
-                    onChange={(e) => {
-                      const ids = pageGuests.map((item) => item.id);
-                      if (e.target.checked) {
-                        setSelectedGuestIds((prev) => Array.from(new Set([...prev, ...ids])));
-                      } else {
-                        setSelectedGuestIds((prev) => prev.filter((id) => !ids.includes(id)));
-                      }
-                    }}
-                  />
-                </th>
-                <th className="px-6 py-4 text-left font-semibold text-gray-700">ឈ្មោះ</th>
-                <th className="px-6 py-4 text-left font-semibold text-gray-700">លេខទូរស័ព្ទ</th>
-                <th className="px-6 py-4 text-left font-semibold text-gray-700">ក្រុម</th>
-                <th className="px-6 py-4 text-left font-semibold text-gray-700">ស្លាក</th>
-                <th className="px-6 py-4 text-left font-semibold text-gray-700">ស្ថានភាព</th>
-                <th className="px-6 py-4 text-left font-semibold text-gray-700">សារជូនពរ</th>
-                <th className="px-6 py-4 text-left font-semibold text-gray-700">កំណត់ចំណាំ</th>
-                <th className="px-6 py-4 text-right font-semibold text-gray-700">សកម្មភាព</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {isLoadingGuests ? (
+              <thead className="bg-gray-50">
                 <tr>
-                  <td colSpan={9} className="px-6 py-10 text-center text-gray-500">
-                    កំពុងទាញយកទិន្នន័យ...
-                  </td>
+                  <th className="w-12 px-6 py-4 text-left">
+                    <input
+                      type="checkbox"
+                      checked={isAllOnPageSelected}
+                      onChange={(e) => {
+                        const ids = pageGuests.map((item) => item.id);
+                        if (e.target.checked) {
+                          setSelectedGuestIds((prev) => Array.from(new Set([...prev, ...ids])));
+                        } else {
+                          setSelectedGuestIds((prev) => prev.filter((id) => !ids.includes(id)));
+                        }
+                      }}
+                    />
+                  </th>
+                  <th className="px-6 py-4 text-left font-semibold text-gray-700">ឈ្មោះ</th>
+                  <th className="px-6 py-4 text-left font-semibold text-gray-700">លេខទូរស័ព្ទ</th>
+                  <th className="px-6 py-4 text-left font-semibold text-gray-700">ក្រុម</th>
+                  <th className="px-6 py-4 text-left font-semibold text-gray-700">ស្លាក</th>
+                  <th className="px-6 py-4 text-left font-semibold text-gray-700">ស្ថានភាព</th>
+                  <th className="px-6 py-4 text-left font-semibold text-gray-700">សារជូនពរ</th>
+                  <th className="px-6 py-4 text-left font-semibold text-gray-700">កំណត់ចំណាំ</th>
+                  <th className="px-6 py-4 text-right font-semibold text-gray-700">សកម្មភាព</th>
                 </tr>
-              ) : pageGuests.length === 0 ? (
-                <tr>
-                  <td colSpan={9} className="px-6 py-12 text-center text-gray-500">
-                    មិនមានទិន្នន័យ។
-                  </td>
-                </tr>
-              ) : (
-                pageGuests.map((guest) => {
-                  const statusMeta = getStatusBadge(guest.rsvpStatus || guest.status);
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {isLoadingGuests ? (
+                  <tr>
+                    <td colSpan={9} className="px-6 py-10 text-center text-gray-500">
+                      កំពុងទាញយកទិន្នន័យ...
+                    </td>
+                  </tr>
+                ) : pageGuests.length === 0 ? (
+                  <tr>
+                    <td colSpan={9} className="px-6 py-12 text-center text-gray-500">
+                      មិនមានទិន្នន័យ។
+                    </td>
+                  </tr>
+                ) : (
+                  pageGuests.map((guest) => {
+                    const statusMeta = getStatusBadge(guest.rsvpStatus || guest.status);
 
-                  return (
-                    <tr key={guest.id} className="transition-colors hover:bg-gray-50">
-                      <td className="relative px-6 py-4">
-                        <input
-                          type="checkbox"
-                          checked={selectedGuestIds.includes(guest.id)}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setSelectedGuestIds((prev) => Array.from(new Set([...prev, guest.id])));
-                            } else {
-                              setSelectedGuestIds((prev) => prev.filter((id) => id !== guest.id));
-                            }
-                          }}
-                        />
-                      </td>
-                      <td className="px-6 py-4 font-semibold text-gray-900">{guest.name}</td>
-                      <td className="px-6 py-4 text-gray-700">{guest.phone || '-'}</td>
-                      <td className="px-6 py-4">
-                        <span className={`inline-flex rounded-full px-2.5 py-1 text-xs ${getGroupBadgeClass(guest.group || 'GROOM_SIDE')}`}>
-                          {getGroupLabel(guest.group)}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className={`inline-flex rounded-full px-2.5 py-1 text-xs ${getTagBadgeClass(guest.tag || 'OTHERS')}`}>
-                          {getTagLabel(guest.tag)}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className={`inline-flex rounded-full px-2.5 py-1 text-xs ${statusMeta.className}`}>
-                          {statusMeta.label}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-gray-700">{guest.greetingMessage}</td>
-                      <td className="px-6 py-4 text-gray-700">{guest.note}</td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center justify-end gap-2">
-                          <button
-                            type="button"
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 bg-gray-100 text-gray-700 transition-colors hover:bg-gray-200"
-                            title="Share"
-                            onClick={() => handleOpenSharePopover(guest)}
-                          >
-                            <Send className="h-4 w-4" />
-                          </button>
-                          <button
-                            type="button"
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 bg-gray-100 text-gray-700 transition-colors hover:bg-gray-200"
-                            title="QR"
-                            onClick={() => handleOpenQrModal(guest)}
-                          >
-                            <QrCode className="h-4 w-4" />
-                          </button>
-                          <button
-                            type="button"
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 bg-gray-100 text-gray-700 transition-colors hover:bg-gray-200"
-                            title="Menu"
-                            onClick={() =>
-                              setActionMenuGuestId((prev) => (prev === guest.id ? null : guest.id))
-                            }
-                          >
-                            <MoreVertical className="h-4 w-4" />
-                          </button>
-                        </div>
-
-                        <AnimatePresence>
-                          {actionMenuGuestId === guest.id && (
-                            <motion.div
-                              ref={actionMenuRef}
-                              initial={{ opacity: 0, y: -12, scale: 0.9 }}
-                              animate={{ opacity: 1, y: 0, scale: 1 }}
-                              exit={{ opacity: 0, y: -12, scale: 0.9 }}
-                              transition={{
-                                duration: 0.2,
-                                type: "spring",
-                                stiffness: 350,
-                                damping: 30
-                              }}
-                              className="absolute right-0 bottom-full z-50 w-48 mb-2 rounded-xl border border-gray-100 bg-white shadow-lg font-khmer-body"
+                    return (
+                      <tr key={guest.id} className="transition-colors hover:bg-gray-50">
+                        <td className="relative px-6 py-4">
+                          <input
+                            type="checkbox"
+                            checked={selectedGuestIds.includes(guest.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedGuestIds((prev) => Array.from(new Set([...prev, guest.id])));
+                              } else {
+                                setSelectedGuestIds((prev) => prev.filter((id) => id !== guest.id));
+                              }
+                            }}
+                          />
+                        </td>
+                        <td className="px-6 py-4 font-semibold text-gray-900">{guest.name}</td>
+                        <td className="px-6 py-4 text-gray-700">{guest.phone || '-'}</td>
+                        <td className="px-6 py-4">
+                          <span className={`inline-flex rounded-full px-2.5 py-1 text-xs ${getGroupBadgeClass(guest.group || 'GROOM_SIDE')}`}>
+                            {getGroupLabel(guest.group)}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className={`inline-flex rounded-full px-2.5 py-1 text-xs ${getTagBadgeClass(guest.tag || 'OTHERS')}`}>
+                            {getTagLabel(guest.tag)}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className={`inline-flex rounded-full px-2.5 py-1 text-xs ${statusMeta.className}`}>
+                            {statusMeta.label}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-gray-700">{guest.greetingMessage}</td>
+                        <td className="px-6 py-4 text-gray-700">{guest.note}</td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              type="button"
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 bg-gray-100 text-gray-700 transition-colors hover:bg-gray-200"
+                              title="Share"
+                              onClick={() => handleOpenSharePopover(guest)}
                             >
-                              <button
-                                type="button"
-                                onClick={() => handleOpenEditGuest(guest)}
-                                className="flex w-full items-center gap-3 rounded-t-xl px-4 py-3 text-left text-sm text-gray-700 transition-colors hover:bg-amber-50"
-                              >
-                                <Pencil className="h-4 w-4 text-amber-600 flex-shrink-0" />
-                                <span>កែសម្រួលភ្ញៀវ</span>
-                              </button>
+                              <Send className="h-4 w-4" />
+                            </button>
+                            <button
+                              type="button"
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 bg-gray-100 text-gray-700 transition-colors hover:bg-gray-200"
+                              title="QR"
+                              onClick={() => handleOpenQrModal(guest)}
+                            >
+                              <QrCode className="h-4 w-4" />
+                            </button>
+                            <button
+                              type="button"
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 bg-gray-100 text-gray-700 transition-colors hover:bg-gray-200"
+                              title="Menu"
+                              onClick={() =>
+                                setActionMenuGuestId((prev) => (prev === guest.id ? null : guest.id))
+                              }
+                            >
+                              <MoreVertical className="h-4 w-4" />
+                            </button>
+                          </div>
 
-                              <div className="border-t border-gray-100" />
-
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteOneGuest(guest)}
-                                className="flex w-full items-center gap-3 rounded-b-xl px-4 py-3 text-left text-sm text-red-500 transition-colors hover:bg-red-50"
+                          <AnimatePresence>
+                            {actionMenuGuestId === guest.id && (
+                              <motion.div
+                                ref={actionMenuRef}
+                                initial={{ opacity: 0, y: -12, scale: 0.9 }}
+                                animate={{ opacity: 1, y: 0, scale: 1 }}
+                                exit={{ opacity: 0, y: -12, scale: 0.9 }}
+                                transition={{
+                                  duration: 0.2,
+                                  type: "spring",
+                                  stiffness: 350,
+                                  damping: 30
+                                }}
+                                className="absolute right-0 bottom-full z-50 w-48 mb-2 rounded-xl border border-gray-100 bg-white shadow-lg font-khmer-body"
                               >
-                                <Trash2 className="h-4 w-4 flex-shrink-0" />
-                                <span>លុបភ្ញៀវនេះ?</span>
-                              </button>
-                            </motion.div>
-                          )}
-                        </AnimatePresence>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenEditGuest(guest)}
+                                  className="flex w-full items-center gap-3 rounded-t-xl px-4 py-3 text-left text-sm text-gray-700 transition-colors hover:bg-amber-50"
+                                >
+                                  <Pencil className="h-4 w-4 text-amber-600 flex-shrink-0" />
+                                  <span>កែសម្រួលភ្ញៀវ</span>
+                                </button>
+
+                                <div className="border-t border-gray-100" />
+
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteOneGuest(guest)}
+                                  className="flex w-full items-center gap-3 rounded-b-xl px-4 py-3 text-left text-sm text-red-500 transition-colors hover:bg-red-50"
+                                >
+                                  <Trash2 className="h-4 w-4 flex-shrink-0" />
+                                  <span>លុបភ្ញៀវនេះ?</span>
+                                </button>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
 
@@ -1214,12 +1239,12 @@ function AdminAppBase({ activeMenu }: AdminAppProps) {
                       onChange={(e) =>
                         setEditGuestTag(
                           e.target.value as
-                            | 'HIGH_SCHOOL_FRIEND'
-                            | 'COLLEGE_FRIEND'
-                            | 'FRIEND'
-                            | 'TEAMWORK'
-                            | 'RELATIVE'
-                            | 'OTHERS',
+                          | 'HIGH_SCHOOL_FRIEND'
+                          | 'COLLEGE_FRIEND'
+                          | 'FRIEND'
+                          | 'TEAMWORK'
+                          | 'RELATIVE'
+                          | 'OTHERS',
                         )
                       }
                       className="h-10 w-full rounded-md border border-gray-200 bg-gray-50 px-3 text-sm"
@@ -1337,12 +1362,12 @@ function AdminAppBase({ activeMenu }: AdminAppProps) {
                       onChange={(e) =>
                         setNewGuestTag(
                           e.target.value as
-                            | 'HIGH_SCHOOL_FRIEND'
-                            | 'COLLEGE_FRIEND'
-                            | 'FRIEND'
-                            | 'TEAMWORK'
-                            | 'RELATIVE'
-                            | 'OTHERS',
+                          | 'HIGH_SCHOOL_FRIEND'
+                          | 'COLLEGE_FRIEND'
+                          | 'FRIEND'
+                          | 'TEAMWORK'
+                          | 'RELATIVE'
+                          | 'OTHERS',
                         )
                       }
                       className="h-10 w-full rounded-md border border-gray-200 bg-gray-50 px-3 text-sm"
@@ -1491,10 +1516,131 @@ function AdminAppBase({ activeMenu }: AdminAppProps) {
     </div>
   );
 
+  const handleCreateSupportLink = async () => {
+    const label = newSupportLabel.trim();
+    const url = newSupportUrl.trim();
+    if (!label || !url) {
+      setError('Please provide link label and URL.');
+      return;
+    }
+
+    setError('');
+    setIsSavingSupportLink(true);
+    try {
+      const created = await apiClient.createSupportLink({
+        label,
+        url,
+        platform: newSupportPlatform,
+        isActive: true,
+        sortOrder: supportLinks.length,
+      });
+      setSupportLinks((prev) => [...prev, created]);
+      setNewSupportLabel('');
+      setNewSupportUrl('');
+      setSuccess('Support link created');
+    } catch (err: any) {
+      setError(err?.response?.data?.message || 'Failed to create support link');
+    } finally {
+      setIsSavingSupportLink(false);
+    }
+  };
+
+  const handleDeleteSupportLink = async (id: string) => {
+    setError('');
+    try {
+      await apiClient.deleteSupportLink(id);
+      setSupportLinks((prev) => prev.filter((item) => item.id !== id));
+      setSuccess('Support link deleted');
+    } catch (err: any) {
+      setError(err?.response?.data?.message || 'Failed to delete support link');
+    }
+  };
+
+  const handleToggleSupportLink = async (id: string, isActive: boolean) => {
+    setError('');
+    try {
+      const updated = await apiClient.updateSupportLink(id, { isActive: !isActive });
+      setSupportLinks((prev) => prev.map((item) => (item.id === id ? updated : item)));
+    } catch (err: any) {
+      setError(err?.response?.data?.message || 'Failed to update support link');
+    }
+  };
+
   const renderSettings = () => (
-    <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
-      <h2 className="text-xl font-semibold text-gray-900">ការកំណត់</h2>
-      <p className="mt-2 text-gray-600">Admin settings panel is ready for integration.</p>
+    <div className="space-y-4">
+      <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+        <h2 className="text-xl font-semibold text-gray-900">Contact Links</h2>
+        <p className="mt-1 text-sm text-gray-600">Create/Delete links shown as floating contact buttons on events pages.</p>
+
+        <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-4">
+          <Input
+            value={newSupportLabel}
+            onChange={(e) => setNewSupportLabel(e.target.value)}
+            placeholder="Label (Telegram/Facebook)"
+          />
+          <Input
+            value={newSupportUrl}
+            onChange={(e) => setNewSupportUrl(e.target.value)}
+            placeholder="https://..."
+            className="md:col-span-2"
+          />
+          <select
+            value={newSupportPlatform}
+            onChange={(e) => setNewSupportPlatform(e.target.value)}
+            className="h-10 rounded-md border border-gray-300 bg-white px-3 text-sm"
+          >
+            <option value="telegram">Telegram</option>
+            <option value="facebook">Facebook</option>
+            <option value="messenger">Messenger</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+
+        <div className="mt-3">
+          <Button
+            type="button"
+            onClick={handleCreateSupportLink}
+            disabled={isSavingSupportLink}
+            className="bg-[#C52133] text-white hover:bg-[#aa1b2a]"
+          >
+            {isSavingSupportLink ? 'Saving...' : 'Create Link'}
+          </Button>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+        <h3 className="text-lg font-semibold text-gray-900">Existing links</h3>
+        {isLoadingSupportLinks ? (
+          <p className="mt-3 text-sm text-gray-600">Loading links...</p>
+        ) : supportLinks.length === 0 ? (
+          <p className="mt-3 text-sm text-gray-600">No links yet.</p>
+        ) : (
+          <div className="mt-3 space-y-2">
+            {supportLinks.map((link) => (
+              <div key={link.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-gray-200 p-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-gray-900">{link.label}</p>
+                  <p className="max-w-xl truncate text-xs text-gray-600">{link.url}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleToggleSupportLink(link.id, link.isActive)}
+                    className={`rounded-md px-3 py-1.5 text-xs font-semibold ${
+                      link.isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-600'
+                    }`}
+                  >
+                    {link.isActive ? 'Active' : 'Inactive'}
+                  </button>
+                  <Button type="button" variant="outline" size="sm" onClick={() => handleDeleteSupportLink(link.id)}>
+                    Delete
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 
@@ -1600,7 +1746,7 @@ function AdminAppBase({ activeMenu }: AdminAppProps) {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 font-khmer-body">
+    <div className="min-h-screen bg-gray-50 font-khmer-body dark:bg-slate-950 dark:text-slate-100">
       <div className="flex">
         <AdminSidebar
           userName={user.name}
@@ -1612,10 +1758,10 @@ function AdminAppBase({ activeMenu }: AdminAppProps) {
         />
 
         <main className="flex-1 p-6">
-          <header className="mb-6 flex items-center justify-between rounded-2xl border border-gray-100 bg-white px-6 py-4 shadow-sm">
+          <header className="mb-6 flex items-center justify-between rounded-2xl border border-gray-100 bg-white px-6 py-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
-              <p className="text-sm text-gray-600">Manage your event platform from one place</p>
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-slate-100">Admin Dashboard</h1>
+              <p className="text-sm text-gray-600 dark:text-slate-400">Manage your event platform from one place</p>
             </div>
             <div className="flex items-center gap-2">
               <Link href="/">
@@ -1631,7 +1777,7 @@ function AdminAppBase({ activeMenu }: AdminAppProps) {
           {error && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">{error}</div>}
 
           {(isLoadingEvents || isLoadingUsers) && activeMenu !== 'users' && (
-            <div className="mb-4 rounded-lg border border-gray-200 bg-white p-4 text-gray-600">Loading admin data...</div>
+            <div className="mb-4 rounded-lg border border-gray-200 bg-white p-4 text-gray-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">Loading admin data...</div>
           )}
 
           {renderContent()}

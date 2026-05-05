@@ -5,13 +5,15 @@ import { Label } from '@/components/ui/label';
 
 type CoverSectionProps = {
   coverImageUrl: string;
+  lang: 'km' | 'en';
   onCoverChange: (file: File | null) => void;
 };
 
-export default function CoverSection({ coverImageUrl, onCoverChange }: CoverSectionProps) {
+export default function CoverSection({ coverImageUrl, lang, onCoverChange }: CoverSectionProps) {
+  const isKm = lang === 'km';
   return (
     <div className="space-y-3">
-      <Label>ផ្ទុករូបភាព</Label>
+      <Label>{isKm ? 'ផ្ទុករូបភាព' : 'Upload image'}</Label>
       <Input
         type="file"
         accept="image/*"

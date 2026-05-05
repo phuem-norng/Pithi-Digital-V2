@@ -1,11 +1,23 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type ComponentType, type KeyboardEvent } from 'react';
+import {
+  Suspense,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ClipboardEvent,
+  type ComponentType,
+  type KeyboardEvent,
+  type MouseEvent,
+} from 'react';
+import { Assets, getSeededCoverImage, getSeededGalleryImages } from '@/lib/assets';
 import { createPortal } from 'react-dom';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, motion, useMotionValue, useSpring } from 'framer-motion';
 import {
+  AlertCircle,
   ArrowLeft,
   ArrowDown,
   ArrowUp,
@@ -52,12 +64,29 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { MessageCard } from '@/components/ui/message-card';
+import { SupportContactFab } from '@/components/support-contact-fab';
 import { InvitationBuilder } from '@/components/invitation-builder';
+import ImageCover from '@/components/invitation-builder/sections/ImageCover';
+import { DashboardLanguageThemeControls } from '@/components/dashboard-language-theme-controls';
 import type { BuilderState } from '@/components/invitation-builder/types';
 import { apiClient, Event, EventStats, EventType as ApiEventType, Expense, Gift, Guest, Template } from '@/lib/api-client';
 import { EVENT_CATEGORY_BY_KEY, EVENT_CATEGORY_OPTIONS, EventFlowType } from '@/lib/event-categories';
 import { getSavedMyTemplates, MyTemplateItem, removeMyTemplate, saveMyTemplate, syncMyTemplatesForEvent } from '@/lib/my-templates';
 import { withProtectedRoute } from '@/lib/protected-route';
+import {
+  getBuilderCoverFromMyTemplateSnapshots,
+  getEventTemplateCatalogImage,
+  getTemplateCatalogImage,
+} from '@/lib/template-images';
+import { getTemplateStyleDefaults } from '@/lib/template-style';
+import { useLanguage } from '@/lib/language-context';
+import {
+  getEditEventTypeLabel,
+  getEventDetailPageStrings,
+  getGuestGroupLabel,
+  getGuestTagLabel,
+} from '@/lib/event-detail-page-i18n';
 
 type TabId =
   | 'general'
@@ -67,8 +96,7 @@ type TabId =
   | 'edit'
   | 'schedule'
   | 'my-template'
-  | 'template-shop'
-  | 'qr';
+  | 'template-shop';
 
 type EditEventType = 'WEDDING' | 'CEREMONY' | 'BIRTHDAY' | 'HOUSEWARMING' | 'FUNERAL';
 
@@ -94,6 +122,15 @@ const GUEST_TAG_OPTIONS = [
   { value: 'OTHERS', label: 'ផ្សេងៗ' },
 ];
 
+const WEDDING_PROGRAM_TYPE_OPTIONS = [
+  { value: 'ភ្ជាប់ពាក្យ', km: 'ភ្ជាប់ពាក្យ', en: 'Engagement' },
+  { value: 'មង្គលការ', km: 'មង្គលការ', en: 'Wedding ceremony' },
+  { value: 'កាត់ចំណងដៃ', km: 'កាត់ចំណងដៃ', en: 'Gift-cutting ceremony' },
+  { value: 'ពិសារស្លាដក់កន្សែង', km: 'ពិសារស្លាដក់កន្សែង', en: 'Traditional blessing meal' },
+  { value: 'OTHERS', km: 'ផ្សេងៗ', en: 'Others' },
+] as const;
+type WeddingProgramType = (typeof WEDDING_PROGRAM_TYPE_OPTIONS)[number]['value'];
+
 function RequiredStar() {
   return <span className="ml-1 text-red-500">*</span>;
 }
@@ -112,11 +149,21 @@ type GiftRow = {
   updatedAt: string;
 };
 
+type ConfirmDialogState = {
+  isOpen: boolean;
+  message: string;
+  resolve?: (value: boolean) => void;
+};
+
 function EventDetailPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const params = useParams();
   const eventId = params.id as string;
+
+  const { language } = useLanguage();
+  const isKhmer = language === 'km';
+  const S = useMemo(() => getEventDetailPageStrings(isKhmer), [isKhmer]);
 
   const [activeTab, setActiveTab] = useState<TabId>('general');
   const [event, setEvent] = useState<Event | null>(null);
@@ -241,6 +288,7 @@ function EventDetailPage() {
 
   const [editGroomName, setEditGroomName] = useState('');
   const [editBrideName, setEditBrideName] = useState('');
+  const [editWeddingProgramType, setEditWeddingProgramType] = useState<WeddingProgramType>('មង្គលការ');
   const [editEventType, setEditEventType] = useState<EditEventType>('WEDDING');
   const [editCategoryKey, setEditCategoryKey] = useState(EVENT_CATEGORY_OPTIONS[0]?.key || 'wedding');
   const [editHostName, setEditHostName] = useState('');
@@ -254,7 +302,6 @@ function EventDetailPage() {
 
   const [eventTypes, setEventTypes] = useState<ApiEventType[]>([]);
   const [selectedEventTypeId, setSelectedEventTypeId] = useState('');
-  const [selectedTemplateId, setSelectedTemplateId] = useState('');
   const [editSlug, setEditSlug] = useState('');
   const [visibility, setVisibility] = useState<'PUBLIC' | 'PRIVATE'>('PUBLIC');
   const [preventDuplicateGuestNames, setPreventDuplicateGuestNames] = useState(false);
@@ -286,24 +333,71 @@ function EventDetailPage() {
   const [currentTime, setCurrentTime] = useState<number | null>(null);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState>({
+    isOpen: false,
+    message: '',
+  });
   const [accessToken, setAccessToken] = useState('');
   const [previewingTemplateId, setPreviewingTemplateId] = useState<string | null>(null);
+  const [activatingMyTemplateId, setActivatingMyTemplateId] = useState<string | null>(null);
+  const feedbackRef = useRef<HTMLDivElement | null>(null);
+  const [isTabNavHovered, setIsTabNavHovered] = useState(false);
   const isEditFormInitialized = useRef(false);
   const hasShownTemplateToast = useRef(false);
+  const tabNavGlowX = useMotionValue(-140);
+  const tabNavGlowY = useMotionValue(-120);
+  const tabNavGlowSmoothX = useSpring(tabNavGlowX, { stiffness: 260, damping: 28, mass: 0.55 });
+  const tabNavGlowSmoothY = useSpring(tabNavGlowY, { stiffness: 260, damping: 28, mass: 0.55 });
+
+  useEffect(() => {
+    if (!error && !success) {
+      return;
+    }
+    feedbackRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [error, success]);
+
+  const updateEventPageQuery = (updates: Record<string, string | null>) => {
+    const params = new URLSearchParams(searchParams.toString());
+    Object.entries(updates).forEach(([key, value]) => {
+      if (value === null || value === '') {
+        params.delete(key);
+      } else {
+        params.set(key, value);
+      }
+    });
+    const query = params.toString();
+    router.replace(query ? `?${query}` : '?', { scroll: false });
+  };
 
   const weddingPrefix = 'ពិធីរៀបមង្គលការ';
 
   const createAgendaId = () => `agenda-${Math.random().toString(36).slice(2, 9)}`;
   const createAgendaItemId = () => `agenda-item-${Math.random().toString(36).slice(2, 9)}`;
+  const handleTabNavMouseMove = (event: MouseEvent<HTMLElement>) => {
+    const navRect = event.currentTarget.getBoundingClientRect();
+    tabNavGlowX.set(event.clientX - navRect.left - 120);
+    tabNavGlowY.set(event.clientY - navRect.top - 120);
+  };
+
   const getNextAgendaTitle = (sections: typeof agendaSections) => {
-    const titlePattern = /របៀបវារៈទី\s*(\d+)/;
+    if (isKhmer) {
+      const titlePattern = /របៀបវារៈទី\s*(\d+)/;
+      const maxNumber = sections.reduce((maxValue, section) => {
+        const match = titlePattern.exec(section.title);
+        const value = match ? Number(match[1]) : 0;
+        return Number.isFinite(value) && value > maxValue ? value : maxValue;
+      }, 0);
+      const nextNumber = maxNumber > 0 ? maxNumber + 1 : sections.length + 1;
+      return `របៀបវារៈទី${nextNumber}`;
+    }
+    const titlePattern = /Agenda\s*(\d+)/i;
     const maxNumber = sections.reduce((maxValue, section) => {
       const match = titlePattern.exec(section.title);
       const value = match ? Number(match[1]) : 0;
       return Number.isFinite(value) && value > maxValue ? value : maxValue;
     }, 0);
     const nextNumber = maxNumber > 0 ? maxNumber + 1 : sections.length + 1;
-    return `របៀបវារៈទី${nextNumber}`;
+    return `Agenda ${nextNumber}`;
   };
   const removeAgendaSection = (sectionId: string) => {
     setAgendaSections((prev) => prev.filter((section) => section.id !== sectionId));
@@ -370,7 +464,7 @@ function EventDetailPage() {
       const sheetName = workbook.SheetNames[0];
 
       if (!sheetName) {
-        setExpenseImportError('មិនមានទិន្នន័យក្នុងឯកសារ Excel ទេ');
+        setExpenseImportError(S.notices.importNoData);
         setExpenseImportPreview([]);
         return;
       }
@@ -430,11 +524,11 @@ function EventDetailPage() {
 
       const preview = Array.from(grouped.values());
       if (preview.length === 0) {
-        setExpenseImportError('មិនអាចស្វែងរកទិន្នន័យក្នុងឯកសារ Excel បានទេ');
+        setExpenseImportError(S.notices.importExcelNoRows);
       }
       setExpenseImportPreview(preview);
     } catch {
-      setExpenseImportError('មិនអាចអានឯកសារ Excel បានទេ');
+      setExpenseImportError(S.notices.importExcelReadFail);
       setExpenseImportPreview([]);
     } finally {
       setIsParsingExpenseFile(false);
@@ -465,14 +559,14 @@ function EventDetailPage() {
       const stamp = new Date().toISOString().slice(0, 10);
       XLSX.writeFile(workbook, `Expense_Import_Sample_${stamp}.xlsx`);
     } catch {
-      setError('មិនអាចទាញយក Template បានទេ');
+      setError(S.notices.loadTemplateFail2);
       setSuccess('');
     }
   };
 
   const handleImportExpenses = async () => {
     if (expenseImportPreview.length === 0) {
-      setExpenseImportError('មិនមានទិន្នន័យសម្រាប់នាំចូលទេ');
+      setExpenseImportError(S.notices.importEmptyPreview);
       return;
     }
 
@@ -500,12 +594,12 @@ function EventDetailPage() {
 
       const updatedExpenses = await apiClient.getEventExpenses(eventId);
       setExpenseRows(updatedExpenses.map(mapExpenseToRow));
-      setSuccess('បាននាំចូលចំណាយរួចរាល់');
+      setSuccess(S.notices.importOk);
       setError('');
       resetExpenseImportState();
       setIsExpenseImportOpen(false);
     } catch (importError) {
-      setExpenseImportError(extractApiErrorMessage(importError) || 'មិនអាចនាំចូលចំណាយបានទេ');
+      setExpenseImportError(extractApiErrorMessage(importError) || S.notices.importFail);
     } finally {
       setIsImportingExpenses(false);
     }
@@ -609,6 +703,14 @@ function EventDetailPage() {
   }, []);
 
   useEffect(() => {
+    return () => {
+      if (confirmDialog.resolve) {
+        confirmDialog.resolve(false);
+      }
+    };
+  }, [confirmDialog]);
+
+  useEffect(() => {
     if (!expenseColumnMenu) {
       return;
     }
@@ -635,18 +737,18 @@ function EventDetailPage() {
     const message = searchParams.get('message');
 
     if (templateApplied === '1') {
-      setSuccess('បានជ្រើសរើសគំរូធៀបដោយជោគជ័យ!');
+      setSuccess(S.notices.templatePicked);
       setError('');
       hasShownTemplateToast.current = true;
       return;
     }
 
     if (templateApplied === '0') {
-      setError(message || 'មិនអាចជ្រើសរើសគំរូធៀបបានទេ');
+      setError(message || S.notices.templatePickFail);
       setSuccess('');
       hasShownTemplateToast.current = true;
     }
-  }, [searchParams]);
+  }, [searchParams, isKhmer]);
 
   useEffect(() => {
     const tab = searchParams.get('tab');
@@ -671,6 +773,19 @@ function EventDetailPage() {
       setGuestPage(Math.floor(pageParam));
     }
   }, [searchParams]);
+
+  useEffect(() => {
+    if (activeTab !== 'guests') {
+      return;
+    }
+    const currentTab = searchParams.get('tab') || '';
+    const currentPage = searchParams.get('page') || '';
+    const nextPage = String(guestPage);
+    if (currentTab === 'guests' && currentPage === nextPage) {
+      return;
+    }
+    updateEventPageQuery({ tab: 'guests', page: nextPage });
+  }, [activeTab, guestPage, searchParams]);
 
   useEffect(() => {
     // Set currentTime only on the client to avoid hydration mismatch
@@ -742,8 +857,7 @@ function EventDetailPage() {
           setGiftRows([]);
           setSuccess('');
           setError(
-            extractApiErrorMessage(giftsLoadError) ||
-              'មិនអាចទាញយកទិន្នន័យចំណងដៃបានទេ (សូមពិនិត្យ backend/database)',
+            extractApiErrorMessage(giftsLoadError) || S.notices.loadGiftsFail,
           );
         }
 
@@ -755,16 +869,14 @@ function EventDetailPage() {
           setExpenseRows([]);
           setSuccess('');
           setError(
-            extractApiErrorMessage(expenseLoadError) ||
-              'មិនអាចទាញយកទិន្នន័យចំណាយបានទេ (សូមពិនិត្យ backend/database)',
+            extractApiErrorMessage(expenseLoadError) || S.notices.loadExpensesFail,
           );
         }
       } catch (loadError) {
         console.error('Failed to load event:', loadError);
         setSuccess('');
         setError(
-          extractApiErrorMessage(loadError) ||
-            'មិនអាចទាញយកទិន្នន័យព្រឹត្តិការណ៍បានទេ',
+          extractApiErrorMessage(loadError) || S.notices.loadEventFail,
         );
       } finally {
         setIsLoading(false);
@@ -816,7 +928,7 @@ function EventDetailPage() {
       })
       .catch(() => {
         if (!isActive) return;
-        setTemplateError('មិនអាចទាញយកគំរូធៀបបានទេ');
+        setTemplateError(S.notices.loadTemplatesFail);
       })
       .finally(() => {
         if (!isActive) return;
@@ -871,10 +983,10 @@ function EventDetailPage() {
       });
 
       setEvent(updatedEvent);
-      setSuccess('រក្សាទុករបៀបវារៈបានជោគជ័យ!');
+      setSuccess(S.notices.saveAgendaOk);
     } catch (saveError) {
       setSuccess('');
-      setError(extractApiErrorMessage(saveError) || 'មិនអាចរក្សាទុករបៀបវារៈបានទេ');
+      setError(extractApiErrorMessage(saveError) || S.notices.saveAgendaFail);
     } finally {
       setIsSavingAgenda(false);
     }
@@ -1054,6 +1166,15 @@ function EventDetailPage() {
     setEditCategoryKey(inferredCategoryKey);
     setEditGroomName(groomName);
     setEditBrideName(brideName === 'Bride Name' ? '' : brideName);
+    const programType = getMetadataValue('programType');
+    const isKnownWeddingProgramType =
+      typeof programType === 'string' &&
+      WEDDING_PROGRAM_TYPE_OPTIONS.some((item) => item.value === programType);
+    setEditWeddingProgramType(
+      isKnownWeddingProgramType
+        ? (programType as WeddingProgramType)
+        : 'មង្គលការ',
+    );
     setEditHostName('');
     setEditEventTitle(event.title || '');
     setEditCeremonyName(event.title || '');
@@ -1072,12 +1193,11 @@ function EventDetailPage() {
     setEditSlug(event.slug || '');
     setEditGoogleMapLink(
       event.googleMapLink ||
-        (typeof getMetadataValue('googleMapLink') === 'string'
-          ? (getMetadataValue('googleMapLink') as string)
-          : ''),
+      (typeof getMetadataValue('googleMapLink') === 'string'
+        ? (getMetadataValue('googleMapLink') as string)
+        : ''),
     );
     setSelectedEventTypeId(event.eventTypeId || '');
-    setSelectedTemplateId(event.templateId || '');
     setVisibility((event.metadata?.visibility as 'PUBLIC' | 'PRIVATE') || 'PUBLIC');
     setPreventDuplicateGuestNames(Boolean(event.metadata?.preventDuplicateGuestNames));
     isEditFormInitialized.current = true;
@@ -1154,6 +1274,15 @@ function EventDetailPage() {
     return decodeURI(encodeURI(`${origin}/invitation/${event.id}`));
   }, [event, origin]);
 
+  const activeMyTemplateId = useMemo(() => {
+    if (!event?.metadata || typeof event.metadata !== 'object') {
+      return '';
+    }
+
+    const metadata = event.metadata as Record<string, unknown>;
+    return typeof metadata.activeMyTemplateId === 'string' ? metadata.activeMyTemplateId : '';
+  }, [event?.metadata]);
+
   const activeMyTemplateForInvite = useMemo(() => {
     const eventScopedTemplates = myTemplates
       .filter((item) => item.eventId === eventId)
@@ -1161,6 +1290,13 @@ function EventDetailPage() {
 
     if (!eventScopedTemplates.length) {
       return null;
+    }
+
+    if (activeMyTemplateId) {
+      const bySavedId = eventScopedTemplates.find((item) => item.id === activeMyTemplateId);
+      if (bySavedId) {
+        return bySavedId;
+      }
     }
 
     if (event?.templateId) {
@@ -1171,7 +1307,7 @@ function EventDetailPage() {
     }
 
     return eventScopedTemplates[0];
-  }, [myTemplates, eventId, event?.templateId]);
+  }, [myTemplates, eventId, event?.templateId, activeMyTemplateId]);
 
   const eventMyTemplates = useMemo(
     () => myTemplates.filter((item) => item.eventId === eventId).sort((a, b) => (a.savedAt < b.savedAt ? 1 : -1)),
@@ -1186,17 +1322,19 @@ function EventDetailPage() {
     return `/invitation/${eventId}`;
   }, [activeMyTemplateForInvite, eventId]);
 
-  const tabs: Array<{ id: TabId; label: string; icon: ComponentType<{ className?: string }> }> = [
-    { id: 'general', label: 'ផ្ទាំងព័ត៌មានទូរទៅ', icon: Info },
-    { id: 'guests', label: 'ភ្ញៀវកិត្តិយស', icon: Users },
-    { id: 'gifts', label: 'ចំណងដៃ', icon: Mail },
-    { id: 'expenses', label: 'ចំណាយ', icon: DollarSign },
-    { id: 'edit', label: 'កែប្រែ', icon: Pencil },
-    { id: 'schedule', label: 'របៀបវារៈកម្មវិធី', icon: Clock3 },
-    { id: 'my-template', label: 'គំរូធៀបខ្ញុំ', icon: LayoutTemplate },
-    { id: 'template-shop', label: 'ហាងគំរូធៀប', icon: Store },
-    { id: 'qr', label: 'បង្កើត QR', icon: QrCode },
-  ];
+  const tabs: Array<{ id: TabId; label: string; icon: ComponentType<{ className?: string }> }> = useMemo(
+    () => [
+      { id: 'general', label: S.tabs.general, icon: Info },
+      { id: 'guests', label: S.tabs.guests, icon: Users },
+      { id: 'gifts', label: S.tabs.gifts, icon: Mail },
+      { id: 'expenses', label: S.tabs.expenses, icon: DollarSign },
+      { id: 'edit', label: S.tabs.edit, icon: Pencil },
+      { id: 'schedule', label: S.tabs.schedule, icon: Clock3 },
+      { id: 'my-template', label: S.tabs.myTemplate, icon: LayoutTemplate },
+      { id: 'template-shop', label: S.tabs.templateShop, icon: Store },
+    ],
+    [S],
+  );
 
   const refreshGuestsAndStats = async () => {
     const [statsData, guestsData] = await Promise.all([
@@ -1209,19 +1347,28 @@ function EventDetailPage() {
   };
 
   const localizeApiError = (rawMessage: unknown, fallback: string) => {
-    const message = Array.isArray(rawMessage) ? rawMessage.join(', ') : String(rawMessage || fallback);
+    const message = Array.isArray(rawMessage) ? rawMessage.join(', ') : String(rawMessage || '');
 
     if (message.toLowerCase().includes('guest name already exists')) {
-      return 'មានឈ្មោះភ្ញៀវនេះរួចហើយ សម្រាប់ព្រឹត្តិការណ៍នេះ';
+      return S.guests.guestNameExists;
     }
 
-    return message;
+    return message || fallback;
   };
+
+  const requestConfirmation = (message: string) =>
+    new Promise<boolean>((resolve) => {
+      setConfirmDialog({
+        isOpen: true,
+        message,
+        resolve,
+      });
+    });
 
   const makeInvitationLink = (guestId: string, guestName: string, guestEventId?: string) => {
     if (typeof window === 'undefined') return '';
 
-    const encodedGuestName = encodeURIComponent(guestName || 'ឈ្មោះភ្ញៀវកិត្តិយស');
+    const encodedGuestName = encodeURIComponent(guestName || S.guests.defaultGuestName);
 
     if (activeMyTemplateForInvite) {
       return decodeURI(
@@ -1269,7 +1416,7 @@ function EventDetailPage() {
 
   const openSharePopover = async (guest: Guest & { group?: string; tag?: string; greetingMessage?: string; note?: string }) => {
     setShareGuestId(guest.id);
-    setShareGuestName(guest.name || 'ភ្ញៀវ');
+    setShareGuestName(guest.name || S.guests.defaultGuest);
 
     try {
       await ensureActiveTemplateSnapshotSynced();
@@ -1277,7 +1424,7 @@ function EventDetailPage() {
       // Keep link generation working even if background sync fails.
     }
 
-    setShareLink(makeInvitationLink(guest.id, guest.name || 'ឈ្មោះភ្ញៀវកិត្តិយស', guest.eventId));
+    setShareLink(makeInvitationLink(guest.id, guest.name || S.guests.defaultGuestName, guest.eventId));
     setShareNotice('');
   };
 
@@ -1285,7 +1432,7 @@ function EventDetailPage() {
     if (!shareLink) return;
     try {
       await navigator.clipboard.writeText(shareLink);
-      setShareNotice('Copied to clipboard');
+      setShareNotice(S.guests.copiedToClipboard);
     } catch {
       setShareNotice('Copy failed');
     }
@@ -1295,7 +1442,7 @@ function EventDetailPage() {
     if (!shareLink || typeof window === 'undefined') return;
 
     const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=900x900&data=${encodeURIComponent(shareLink)}`;
-    const guestName = shareGuestName || 'ភ្ញៀវ';
+    const guestName = shareGuestName || S.guests.defaultGuest;
 
     try {
       const qrImage = await new Promise<HTMLImageElement>((resolve, reject) => {
@@ -1318,7 +1465,7 @@ function EventDetailPage() {
       context.fillStyle = '#111827';
       context.font = '700 64px Kantumruy Pro, sans-serif';
       context.textAlign = 'center';
-      context.fillText('តំណអញ្ជើញ', 600, 110);
+      context.fillText(S.guests.linkTitle, 600, 110);
 
       context.fillStyle = '#C52133';
       context.font = '600 44px Kantumruy Pro, sans-serif';
@@ -1330,16 +1477,16 @@ function EventDetailPage() {
 
       context.fillStyle = '#6b7280';
       context.font = '400 22px Kantumruy Pro, sans-serif';
-      context.fillText('Scan to view invitation', 600, 1230);
+      context.fillText(S.guests.scanHint, 600, 1230);
 
       const pngUrl = canvas.toDataURL('image/png');
       const anchor = document.createElement('a');
       anchor.href = pngUrl;
       anchor.download = `invitation-qr-${guestName.replace(/\s+/g, '-')}.png`;
       anchor.click();
-      setShareNotice('QR Code downloaded');
+      setShareNotice(S.guests.shareQrDownloaded);
     } catch {
-      setShareNotice('Download failed');
+      setShareNotice(S.guests.shareDownloadFailed);
     }
   };
 
@@ -1352,12 +1499,12 @@ function EventDetailPage() {
       // Keep link generation working even if background sync fails.
     }
 
-    setShareLink(makeInvitationLink(shareGuestId, shareGuestName || 'ឈ្មោះភ្ញៀវកិត្តិយស', eventId));
-    setShareNotice('Link refreshed');
+    setShareLink(makeInvitationLink(shareGuestId, shareGuestName || S.guests.defaultGuestName, eventId));
+    setShareNotice(S.guests.linkRefreshedNotice);
   };
 
   const openQrModal = async (guest: Guest & { group?: string; tag?: string; greetingMessage?: string; note?: string }) => {
-    setQrGuestName(guest.name || 'ភ្ញៀវ');
+    setQrGuestName(guest.name || S.guests.defaultGuest);
 
     try {
       await ensureActiveTemplateSnapshotSynced();
@@ -1365,7 +1512,7 @@ function EventDetailPage() {
       // Keep link generation working even if background sync fails.
     }
 
-    setQrLink(makeInvitationLink(guest.id, guest.name || 'ឈ្មោះភ្ញៀវកិត្តិយស', guest.eventId));
+    setQrLink(makeInvitationLink(guest.id, guest.name || S.guests.defaultGuestName, guest.eventId));
     setIsQrModalOpen(true);
   };
 
@@ -1395,7 +1542,7 @@ function EventDetailPage() {
       context.fillStyle = '#111827';
       context.font = '700 46px Kantumruy Pro, sans-serif';
       context.textAlign = 'center';
-      context.fillText('QR Code', 450, 80);
+      context.fillText(S.guests.qrCodeLabel, 450, 80);
 
       context.fillStyle = '#ffffff';
       context.strokeStyle = '#f1f5f9';
@@ -1406,11 +1553,11 @@ function EventDetailPage() {
 
       context.fillStyle = '#374151';
       context.font = '500 28px Kantumruy Pro, sans-serif';
-      context.fillText(qrGuestName || 'ភ្ញៀវ', 450, 840);
+      context.fillText(qrGuestName || S.guests.defaultGuest, 450, 840);
 
       context.fillStyle = '#6b7280';
       context.font = '400 20px Kantumruy Pro, sans-serif';
-      context.fillText('ស្កេនដើម្បីមើលធៀបអញ្ជើញ', 450, 890);
+      context.fillText(S.guests.scanHint, 450, 890);
 
       const dataUrl = canvas.toDataURL('image/png');
       const anchor = document.createElement('a');
@@ -1418,7 +1565,7 @@ function EventDetailPage() {
       anchor.download = `guest-qr-${(qrGuestName || 'guest').replace(/\s+/g, '-')}.png`;
       anchor.click();
     } catch {
-      setError('មិនអាចទាញយក QR កូដបានទេ');
+      setError(S.notices.loadQrFail);
     }
   };
 
@@ -1442,7 +1589,7 @@ function EventDetailPage() {
 
     const name = editGuestName.trim();
     if (!name) {
-      setError('សូមបញ្ចូលឈ្មោះភ្ញៀវ');
+      setError(S.guests.errEnterName);
       return;
     }
 
@@ -1466,12 +1613,12 @@ function EventDetailPage() {
       setIsEditGuestModalOpen(false);
       setEditingGuestId(null);
     } catch {
-      setError('កែសម្រួលភ្ញៀវមិនជោគជ័យ');
+      setError(S.guests.errEditFail);
     }
   };
 
   const handleDeleteOneGuest = async (guestId: string) => {
-    const confirmed = window.confirm('តើអ្នកចង់លុបភ្ញៀវនេះមែនទេ?');
+    const confirmed = await requestConfirmation(S.guests.confirmDeleteOne);
     if (!confirmed) return;
 
     try {
@@ -1480,14 +1627,14 @@ function EventDetailPage() {
       setSelectedGuestIds((prev) => prev.filter((id) => id !== guestId));
       setActionMenuGuestId(null);
     } catch {
-      setError('លុបទិន្នន័យមិនជោគជ័យ');
+      setError(S.guests.deleteFail);
     }
   };
 
   const handleAddGuest = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
-    const confirmed = window.confirm('តើអ្នកចង់បង្កើតភ្ញៀវថ្មីមែនទេ?');
+    const confirmed = await requestConfirmation(S.guests.confirmAddGuest);
     if (!confirmed) return;
 
     setError('');
@@ -1509,10 +1656,10 @@ function EventDetailPage() {
       setGuestTag('OTHERS');
       setGuestNote('');
       setIsGuestFormOpen(false);
-      setSuccess('បានបន្ថែមភ្ញៀវថ្មីរួចរាល់');
+      setSuccess(S.guests.addSuccess);
     } catch (submitError: any) {
       const message = submitError?.response?.data?.message;
-      setError(localizeApiError(message, 'បន្ថែមភ្ញៀវមិនជោគជ័យ'));
+      setError(localizeApiError(message, S.guests.addFail));
     } finally {
       setIsSubmittingGuest(false);
     }
@@ -1541,22 +1688,22 @@ function EventDetailPage() {
 
       if (editEventType === 'WEDDING') {
         if (!editGroomName.trim() || !editBrideName.trim()) {
-          throw new Error('សូមបំពេញឈ្មោះកូនប្រុស និង កូនស្រី');
+          throw new Error(S.edit.validationWeddingNames);
         }
         title = `ពិធីរៀបមង្គលការ ${editGroomName.trim()} និង ${editBrideName.trim()}`;
       } else if (editEventType === 'CEREMONY') {
         if (!editCeremonyName.trim() || !editWatName.trim() || !editMainCelebrant.trim()) {
-          throw new Error('សូមបំពេញ Ceremony Name, Wat Name និង Main Celebrant');
+          throw new Error(S.edit.validationCeremony);
         }
         title = editCeremonyName.trim();
       } else if (editEventType === 'FUNERAL') {
         if (!editDeceasedName.trim() || !editDeceasedAge.trim() || !editReligiousRites.trim()) {
-          throw new Error('សូមបំពេញ Deceased Name, Age និង Religious Rites');
+          throw new Error(S.edit.validationFuneral);
         }
         title = `បុណ្យសព ${editDeceasedName.trim()}`;
       } else {
         if (!editHostName.trim() || !editEventTitle.trim()) {
-          throw new Error('សូមបំពេញ Host Name និង Event Title');
+          throw new Error(S.edit.validationHost);
         }
         title = editEventTitle.trim();
       }
@@ -1589,14 +1736,14 @@ function EventDetailPage() {
         khqrRiel,
         metadata: {
           ...(event.metadata || {}),
-          category: EVENT_CATEGORY_BY_KEY[editCategoryKey]?.subtitle || 'ព្រឹត្តិការណ៍',
+          category: EVENT_CATEGORY_BY_KEY[editCategoryKey]?.subtitle || S.edit.defaultEventCategory,
           categoryKey: editCategoryKey,
+          programType: editEventType === 'WEDDING' ? editWeddingProgramType : undefined,
           visibility,
           preventDuplicateGuestNames,
           eventEndDate: editEndDate || editDate,
         },
         eventTypeId: selectedEventTypeId || undefined,
-        templateId: selectedTemplateId || undefined,
       });
 
       syncMyTemplatesForEvent(event.id, [previousTemplateId, updated.templateId], {
@@ -1605,17 +1752,16 @@ function EventDetailPage() {
         eventEndDate: editEndDate || editDate,
         eventLocation: editAddress,
         mapUrl: editGoogleMapLink || '',
-        coverImageUrl: coverImage || '',
         khqrUsdUrl: khqrDollar || '',
         khqrKhrUrl: khqrRiel || '',
       });
 
       setEvent(updated);
       setMyTemplates(getSavedMyTemplates());
-      setSuccess('បានកែប្រែព្រឹត្តិការណ៍ដោយជោគជ័យ');
+      setSuccess(S.notices.changeEventOk);
     } catch (saveError: any) {
       const message = saveError?.response?.data?.message;
-      setError(Array.isArray(message) ? message.join(', ') : message || 'កែប្រែមិនជោគជ័យ');
+      setError(Array.isArray(message) ? message.join(', ') : message || S.notices.changeEventFail);
     } finally {
       setIsSavingEvent(false);
     }
@@ -1626,7 +1772,7 @@ function EventDetailPage() {
       return;
     }
 
-    const confirmed = window.confirm('តើអ្នកប្រាកដថាចង់លុបព្រឹត្តិការណ៍នេះមែនទេ?');
+    const confirmed = await requestConfirmation(S.notices.deleteEventConfirm);
     if (!confirmed) {
       return;
     }
@@ -1640,7 +1786,7 @@ function EventDetailPage() {
       router.push('/dashboard');
     } catch (deleteError: any) {
       const message = deleteError?.response?.data?.message;
-      setError(Array.isArray(message) ? message.join(', ') : message || 'លុបព្រឹត្តិការណ៍មិនជោគជ័យ');
+      setError(Array.isArray(message) ? message.join(', ') : message || S.notices.deleteEventFail);
     } finally {
       setIsDeletingEvent(false);
     }
@@ -1676,22 +1822,22 @@ function EventDetailPage() {
     return (
       <div className="space-y-6 font-khmer-body">
 
-        <section className="grid grid-cols-1 gap-4 xl:grid-cols-5">
-          <div className="rounded-3xl border border-sky-100 bg-sky-50/70 p-6 shadow-sm">
-            <p className="font-khmer-heading text-sm text-sky-700">ភ្ញៀវដែលបានអញ្ជើញ</p>
+        <section className="flex gap-4 overflow-x-auto pb-2 xl:grid xl:grid-cols-5 xl:overflow-visible">
+          <div className="min-w-[250px] rounded-3xl border border-sky-100 bg-sky-50/70 p-6 shadow-sm xl:min-w-0">
+            <p className="font-khmer-heading text-sm text-sky-700">{S.general.invitedGuests}</p>
             <p className="mt-2 text-3xl font-semibold text-sky-900">{totalGuests}</p>
           </div>
-          <div className="rounded-3xl border border-emerald-100 bg-emerald-50/70 p-6 shadow-sm">
-            <p className="font-khmer-heading text-sm text-emerald-700">ចំនួនបញ្ជាក់ចូលរួមសរុប</p>
+          <div className="min-w-[250px] rounded-3xl border border-emerald-100 bg-emerald-50/70 p-6 shadow-sm xl:min-w-0">
+            <p className="font-khmer-heading text-sm text-emerald-700">{S.general.totalConfirmed}</p>
             <p className="mt-2 text-3xl font-semibold text-emerald-900">{acceptedGuests}</p>
           </div>
-          <div className="rounded-3xl border border-violet-100 bg-violet-50/70 p-6 shadow-sm">
-            <p className="font-khmer-heading text-sm text-violet-700">ជាប្រាក់រៀល</p>
+          <div className="min-w-[250px] rounded-3xl border border-violet-100 bg-violet-50/70 p-6 shadow-sm xl:min-w-0">
+            <p className="font-khmer-heading text-sm text-violet-700">{S.general.inRiel}</p>
             <p className="mt-2 text-3xl font-semibold text-violet-900">៛{formatAmount(totalGiftKhr)}</p>
-            <p className="mt-2 text-xs text-violet-700">អត្រា​ប្តូរប្រាក់: 1 USD = 4000 KHR</p>
+            <p className="mt-2 text-xs text-violet-700">{S.general.exchangeNote}</p>
           </div>
-          <div className="rounded-3xl border border-rose-100 bg-rose-50/70 p-6 shadow-sm">
-            <p className="font-khmer-heading text-sm text-rose-700">ការចំណាយ</p>
+          <div className="min-w-[250px] rounded-3xl border border-rose-100 bg-rose-50/70 p-6 shadow-sm xl:min-w-0">
+            <p className="font-khmer-heading text-sm text-rose-700">{S.general.expenses}</p>
             <p className="mt-2 text-3xl font-semibold text-rose-900">${formatUsd(totalExpenseActualUsd)}</p>
             <div className="mt-3">
               <p className="text-xs text-rose-700">{expensePercent}%</p>
@@ -1700,17 +1846,17 @@ function EventDetailPage() {
               </div>
             </div>
           </div>
-          <div className="rounded-3xl border border-teal-100 bg-teal-50/70 p-6 shadow-sm">
-            <p className="font-khmer-heading text-sm text-teal-700">ចំណេញ/ខាត</p>
+          <div className="min-w-[250px] rounded-3xl border border-teal-100 bg-teal-50/70 p-6 shadow-sm xl:min-w-0">
+            <p className="font-khmer-heading text-sm text-teal-700">{S.general.profitLoss}</p>
             <p className="mt-2 text-3xl font-semibold text-teal-900">${formatUsd(profitLossUsd)}</p>
           </div>
         </section>
 
         <section className="grid grid-cols-1 gap-4 xl:grid-cols-[1.1fr_0.9fr]">
-          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-900">
             <div className="flex items-center justify-between">
-              <h3 className="font-khmer-heading text-lg text-slate-900">ក្រាបទិន្នន័យអ្នកចូលរួម</h3>
-              <CheckCircle2 className="h-5 w-5 text-slate-400" />
+              <h3 className="font-khmer-heading text-lg text-slate-900 dark:text-slate-100">{S.general.chartParticipation}</h3>
+              <CheckCircle2 className="h-5 w-5 text-slate-400 dark:text-slate-500" />
             </div>
             <div className="mt-5 flex flex-col gap-6 sm:flex-row sm:items-center">
               <div
@@ -1719,22 +1865,22 @@ function EventDetailPage() {
                   background: `conic-gradient(#10b981 0% ${acceptRate}%, #f59e0b ${acceptRate}% ${acceptRate + pendingRate}%, #f43f5e ${acceptRate + pendingRate}% 100%)`,
                 }}
               />
-              <div className="space-y-3 text-sm text-slate-600">
+              <div className="space-y-3 text-sm text-slate-600 dark:text-slate-300">
                 <div className="flex items-center justify-between gap-4">
                   <span className="flex items-center gap-2">
-                    <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />បានបញ្ជាក់
+                    <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />{S.general.legendConfirmed}
                   </span>
                   <span>{acceptRate}%</span>
                 </div>
                 <div className="flex items-center justify-between gap-4">
                   <span className="flex items-center gap-2">
-                    <span className="h-2.5 w-2.5 rounded-full bg-amber-400" />មិនទាន់ឆ្លើយតប
+                    <span className="h-2.5 w-2.5 rounded-full bg-amber-400" />{S.general.legendPending}
                   </span>
                   <span>{pendingRate}%</span>
                 </div>
                 <div className="flex items-center justify-between gap-4">
                   <span className="flex items-center gap-2">
-                    <span className="h-2.5 w-2.5 rounded-full bg-rose-400" />បដិសេធ
+                    <span className="h-2.5 w-2.5 rounded-full bg-rose-400" />{S.general.legendDeclined}
                   </span>
                   <span>{declineRate}%</span>
                 </div>
@@ -1742,24 +1888,24 @@ function EventDetailPage() {
             </div>
           </div>
 
-          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-900">
             <div className="flex items-center justify-between">
-              <h3 className="font-khmer-heading text-lg text-slate-900">ក្រាបទិន្នន័យហិរញ្ញវត្ថុ</h3>
-              <DollarSign className="h-5 w-5 text-slate-400" />
+              <h3 className="font-khmer-heading text-lg text-slate-900 dark:text-slate-100">{S.general.chartFinance}</h3>
+              <DollarSign className="h-5 w-5 text-slate-400 dark:text-slate-500" />
             </div>
             <div className="mt-6 space-y-4">
               {[
-                { label: 'ចំណងដៃ', value: totalGiftAsUsd, color: 'bg-emerald-400' },
-                { label: 'ចំណាយប៉ាន់ស្មាន', value: totalExpenseBudgetUsd, color: 'bg-amber-400' },
-                { label: 'ចំណាយពិត', value: totalExpenseActualUsd, color: 'bg-sky-400' },
-                { label: 'ចំណេញ/ខាត', value: profitLossUsd, color: 'bg-rose-400' },
+                { label: S.general.barGifts, value: totalGiftAsUsd, color: 'bg-emerald-400' },
+                { label: S.general.barBudget, value: totalExpenseBudgetUsd, color: 'bg-amber-400' },
+                { label: S.general.barActual, value: totalExpenseActualUsd, color: 'bg-sky-400' },
+                { label: S.general.barProfit, value: profitLossUsd, color: 'bg-rose-400' },
               ].map((item) => (
                 <div key={item.label}>
-                  <div className="mb-2 flex items-center justify-between text-sm text-slate-600">
+                  <div className="mb-2 flex items-center justify-between text-sm text-slate-600 dark:text-slate-300">
                     <span>{item.label}</span>
                     <span>${formatUsd(item.value)}</span>
                   </div>
-                  <div className="h-2 w-full rounded-full bg-slate-100">
+                  <div className="h-2 w-full rounded-full bg-slate-100 dark:bg-slate-700">
                     <div
                       className={`h-full rounded-full ${item.color}`}
                       style={{ width: `${Math.min(100, (item.value / (totalGiftAsUsd || 1)) * 100)}%` }}
@@ -1771,78 +1917,80 @@ function EventDetailPage() {
           </div>
         </section>
 
-        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-900">
           <div className="flex items-center justify-between">
-            <h3 className="font-khmer-heading text-lg text-slate-900">ទិដ្ឋភាពទូទៅហិរញ្ញវត្ថុ</h3>
-            <DollarSign className="h-5 w-5 text-slate-400" />
+            <h3 className="font-khmer-heading text-lg text-slate-900 dark:text-slate-100">{S.general.financeOverviewTitle}</h3>
+            <DollarSign className="h-5 w-5 text-slate-400 dark:text-slate-500" />
           </div>
-          <div className="mt-5 space-y-3 text-sm text-slate-600">
-            <div className="flex items-center justify-between border-b border-dashed border-slate-200 pb-2">
-              <span>ចំណងដៃ</span>
+          <div className="mt-5 space-y-3 text-sm text-slate-600 dark:text-slate-300">
+            <div className="flex items-center justify-between border-b border-dashed border-slate-200 pb-2 dark:border-slate-700">
+              <span>{S.general.financeGifts}</span>
               <span>${formatUsd(totalGiftAsUsd)}</span>
             </div>
-            <div className="flex items-center justify-between border-b border-dashed border-slate-200 pb-2">
-              <span>ចំណាយសរុប (ចំណាយជាក់ស្តែង)</span>
+            <div className="flex items-center justify-between border-b border-dashed border-slate-200 pb-2 dark:border-slate-700">
+              <span>{S.general.financeExpensesActual}</span>
               <span>${formatUsd(totalExpenseActualUsd)}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span>ចំនេញ/ខាត</span>
+              <span>{S.general.financeProfit}</span>
               <span>${formatUsd(profitLossUsd)}</span>
             </div>
           </div>
         </section>
 
-        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-900">
           <div className="flex items-center justify-between">
-            <h3 className="font-khmer-heading text-lg text-slate-900">ស្ថិតិភ្ញៀវ</h3>
-            <Users className="h-5 w-5 text-slate-400" />
+            <h3 className="font-khmer-heading text-lg text-slate-900 dark:text-slate-100">{S.general.guestStatsTitle}</h3>
+            <Users className="h-5 w-5 text-slate-400 dark:text-slate-500" />
           </div>
-          <div className="mt-5 space-y-3 text-sm text-slate-600">
-            <div className="flex items-center justify-between border-b border-dashed border-slate-200 pb-2">
-              <span>បានបញ្ជាក់</span>
+          <div className="mt-5 space-y-3 text-sm text-slate-600 dark:text-slate-300">
+            <div className="flex items-center justify-between border-b border-dashed border-slate-200 pb-2 dark:border-slate-700">
+              <span>{S.general.statConfirmed}</span>
               <span>{acceptedGuests}</span>
             </div>
-            <div className="flex items-center justify-between border-b border-dashed border-slate-200 pb-2">
-              <span>មិនទាន់ឆ្លើយតប</span>
+            <div className="flex items-center justify-between border-b border-dashed border-slate-200 pb-2 dark:border-slate-700">
+              <span>{S.general.statPending}</span>
               <span>{pendingGuests}</span>
             </div>
-            <div className="flex items-center justify-between border-b border-dashed border-slate-200 pb-2">
-              <span>បានបដិសេធ</span>
+            <div className="flex items-center justify-between border-b border-dashed border-slate-200 pb-2 dark:border-slate-700">
+              <span>{S.general.statDeclined}</span>
               <span>{declinedGuests}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span>បានចងដៃ</span>
+              <span>{S.general.statGifted}</span>
               <span>{giftRows.length}</span>
             </div>
           </div>
         </section>
 
         <section className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_1fr]">
-          <div className="rounded-3xl border border-amber-100 bg-gradient-to-br from-amber-50 via-white to-rose-50 p-6 shadow-sm">
+          <div className="rounded-3xl border border-amber-100 bg-gradient-to-br from-amber-50 via-white to-rose-50 p-6 shadow-sm dark:border-slate-700 dark:from-slate-900 dark:via-slate-900 dark:to-slate-800">
             <div className="flex items-start justify-between">
               <div>
-                <h3 className="font-khmer-heading text-lg text-amber-900">ចំណងដៃថ្មីៗ</h3>
-                <p className="mt-1 text-sm text-amber-700">ការចូលចិត្ត និងចំណងដៃចុងក្រោយ</p>
+                <h3 className="font-khmer-heading text-lg text-amber-900 dark:text-slate-100">{S.general.recentGiftsTitle}</h3>
+                <p className="mt-1 text-sm text-amber-700 dark:text-slate-300">{S.general.recentGiftsSubtitle}</p>
               </div>
-              <Mail className="h-5 w-5 text-amber-700" />
+              <Mail className="h-5 w-5 text-amber-700 dark:text-slate-300" />
             </div>
-            <p className="mt-4 text-sm text-amber-700">បានទទួលចំណងដៃសរុបចំនួន</p>
-            <p className="mt-2 text-2xl font-semibold text-amber-900">{giftRows.length} នាក់</p>
+            <p className="mt-4 text-sm text-amber-700 dark:text-slate-300">{S.general.totalGiftsLine}</p>
+            <p className="mt-2 text-2xl font-semibold text-amber-900 dark:text-slate-100">
+              {giftRows.length} {S.general.peopleSuffix}
+            </p>
           </div>
 
           {(() => {
             // Prevent hydration mismatch: only render countdown after currentTime is set on client
             if (currentTime === null) {
               return (
-                <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+                <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-900">
                   <div className="flex items-start justify-between">
                     <div>
-                      <h3 className="font-khmer-heading text-lg text-slate-900">កំណត់ពេលកម្មវិធី</h3>
-                      <p className="mt-1 text-sm text-slate-500">សម័យរាប់ថយក្រោយ</p>
+                      <h3 className="font-khmer-heading text-lg text-slate-900 dark:text-slate-100">{S.general.countdownTitle}</h3>
+                      <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{S.general.countdownSubtitle}</p>
                     </div>
-                    <Clock3 className="h-5 w-5 text-slate-400" />
+                    <Clock3 className="h-5 w-5 text-slate-400 dark:text-slate-500" />
                   </div>
-                  <div className="mt-4 text-center text-gray-400">Loading...</div>
+                  <div className="mt-4 text-center text-gray-400 dark:text-slate-400">{S.general.countdownLoading}</div>
                 </div>
               );
             }
@@ -1857,31 +2005,31 @@ function EventDetailPage() {
             const seconds = totalSeconds % 60;
 
             return (
-              <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-900">
                 <div className="flex items-start justify-between">
                   <div>
-                    <h3 className="font-khmer-heading text-lg text-slate-900">កំណត់ពេលកម្មវិធី</h3>
-                    <p className="mt-1 text-sm text-slate-500">សម័យរាប់ថយក្រោយ</p>
+                    <h3 className="font-khmer-heading text-lg text-slate-900 dark:text-slate-100">{S.general.countdownTitle}</h3>
+                    <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{S.general.countdownSubtitle}</p>
                   </div>
-                  <Clock3 className="h-5 w-5 text-slate-400" />
+                  <Clock3 className="h-5 w-5 text-slate-400 dark:text-slate-500" />
                 </div>
 
                 <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
                   {[
-                    { label: 'ថ្ងៃ', value: days },
-                    { label: 'ម៉ោង', value: String(hours).padStart(2, '0') },
-                    { label: 'នាទី', value: String(minutes).padStart(2, '0') },
-                    { label: 'វិនាទី', value: String(seconds).padStart(2, '0') },
+                    { label: S.general.day, value: days },
+                    { label: S.general.hour, value: String(hours).padStart(2, '0') },
+                    { label: S.general.minute, value: String(minutes).padStart(2, '0') },
+                    { label: S.general.second, value: String(seconds).padStart(2, '0') },
                   ].map((item) => (
-                    <div key={item.label} className="rounded-2xl border border-slate-100 bg-slate-50 p-3 text-center">
-                      <p className="text-xl font-semibold text-slate-900 sm:text-2xl">{item.value}</p>
-                      <p className="mt-1 text-xs text-slate-500">{item.label}</p>
+                    <div key={item.label} className="rounded-2xl border border-slate-100 bg-slate-50 p-3 text-center dark:border-slate-700 dark:bg-slate-800">
+                      <p className="text-xl font-semibold text-slate-900 sm:text-2xl dark:text-slate-100">{item.value}</p>
+                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{item.label}</p>
                     </div>
                   ))}
                 </div>
 
                 {isPast && (
-                  <p className="mt-3 text-sm font-medium text-rose-600">កម្មវិធីបានចាប់ផ្ដើមរួចហើយ</p>
+                  <p className="mt-3 text-sm font-medium text-rose-600">{S.general.eventStarted}</p>
                 )}
               </div>
             );
@@ -1921,20 +2069,33 @@ function EventDetailPage() {
     const pageGuests = filteredGuests.slice(startIndex, startIndex + guestRowsPerPage);
     const allOnPageSelected = pageGuests.length > 0 && pageGuests.every((guest) => selectedGuestIds.includes(guest.id));
 
-    const getStatusMeta = (status: string | undefined) => {
+    const getStatusMeta = (guest: Guest) => {
+      const status = guest.rsvpStatus || guest.status;
       if (status === 'CONFIRMED' || status === 'ACCEPTED') {
-        return { label: 'Confirmed', classes: 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200' };
+        const attendees = Number.isFinite(guest.adultCount) && Number(guest.adultCount) > 0 ? Number(guest.adultCount) : 1;
+        return {
+          label: `${S.guests.statusConfirmed} (${attendees} ${S.guests.attendeesSuffix})`,
+          classes: 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200',
+        };
       }
 
       if (status === 'PENDING') {
-        return { label: 'Pending', classes: 'bg-amber-50 text-amber-700 ring-1 ring-amber-200' };
+        return { label: S.guests.statusPending, classes: 'bg-amber-50 text-amber-700 ring-1 ring-amber-200' };
       }
 
-      return { label: 'មិនបានចូលរួម', classes: 'bg-rose-50 text-rose-700 ring-1 ring-rose-200' };
+      return { label: S.guests.statusDeclined, classes: 'bg-rose-50 text-rose-700 ring-1 ring-rose-200' };
     };
 
-    const getGroupLabel = (value: string) => GUEST_GROUP_OPTIONS.find((item) => item.value === value)?.label || '-';
-    const getTagLabel = (value: string) => GUEST_TAG_OPTIONS.find((item) => item.value === value)?.label || '-';
+    const getGroupLabel = (value: string) => {
+      const opt = GUEST_GROUP_OPTIONS.find((item) => item.value === value);
+      if (!opt) return '-';
+      return getGuestGroupLabel(opt.value, isKhmer, opt.label);
+    };
+    const getTagLabel = (value: string) => {
+      const opt = GUEST_TAG_OPTIONS.find((item) => item.value === value);
+      if (!opt) return '-';
+      return getGuestTagLabel(opt.value, isKhmer, opt.label);
+    };
     const getGroupBadgeClass = (value: string) =>
       value === 'BRIDE_SIDE'
         ? 'bg-pink-50 text-pink-600 ring-1 ring-pink-200'
@@ -1959,16 +2120,16 @@ function EventDetailPage() {
       const rowsToExport = filteredGuests;
 
       if (rowsToExport.length === 0) {
-        setError('មិនមានទិន្នន័យសម្រាប់ទាញយកទេ');
+        setError(S.guests.exportNoData);
         setSuccess('');
         return;
       }
 
       setError('');
-      setSuccess('កំពុងរៀបចំឯកសារ Excel...');
+      setSuccess(S.guests.preparingExcel);
 
       const exportRows = rowsToExport.map((guest) => {
-        const statusLabel = getStatusMeta(guest.rsvpStatus || guest.status).label;
+        const statusLabel = getStatusMeta(guest).label;
 
         return {
           Name: guest.name,
@@ -1990,10 +2151,10 @@ function EventDetailPage() {
         const safeEventName = (event?.title || 'event').replace(/[\\/:*?"<>|]/g, '-');
         XLSX.writeFile(workbook, `${safeEventName}_GuestList_${stamp}.xlsx`);
 
-        setSuccess('ទាញយកបានជោគជ័យ!');
+        setSuccess(S.guests.exportOk);
       } catch {
         setSuccess('');
-        setError('មិនអាចទាញយកឯកសារ Excel បានទេ');
+        setError(S.guests.exportFail);
       }
     };
 
@@ -2011,9 +2172,9 @@ function EventDetailPage() {
       try {
         await navigator.clipboard.writeText(guestListUrl);
         setError('');
-        setSuccess('បានចម្លងតំណភ្ជាប់បញ្ជីភ្ញៀវរួចរាល់!');
+        setSuccess(S.guests.copyOk);
       } catch {
-        setError('មិនអាចចម្លងទិន្នន័យបានទេ');
+        setError(S.guests.copyFail);
         setSuccess('');
       }
     };
@@ -2021,7 +2182,7 @@ function EventDetailPage() {
     const handleDeleteSelected = async () => {
       const selectedRows = filteredGuests.filter((item) => selectedGuestIds.includes(item.id));
       if (selectedRows.length === 0) {
-        const confirmedAll = window.confirm('មិនបានជ្រើសភ្ញៀវ។ តើអ្នកចង់លុបទាំងអស់មែនទេ?');
+        const confirmedAll = await requestConfirmation(S.guests.confirmDeleteNone);
         if (!confirmedAll) return;
 
         try {
@@ -2029,12 +2190,16 @@ function EventDetailPage() {
           await refreshGuestsAndStats();
           setSelectedGuestIds([]);
         } catch {
-          setError('លុបទិន្នន័យមិនជោគជ័យ');
+          setError(S.guests.deleteFail);
         }
         return;
       }
 
-      const confirmed = window.confirm(`តើអ្នកចង់លុបភ្ញៀវចំនួន ${selectedRows.length} នាក់មែនទេ?`);
+      const confirmed = await requestConfirmation(
+        isKhmer
+          ? `តើអ្នកចង់លុបភ្ញៀវចំនួន ${selectedRows.length} នាក់មែនទេ?`
+          : `Delete ${selectedRows.length} guest(s)?`,
+      );
       if (!confirmed) return;
 
       try {
@@ -2042,25 +2207,25 @@ function EventDetailPage() {
         await refreshGuestsAndStats();
         setSelectedGuestIds([]);
       } catch {
-        setError('លុបទិន្នន័យមិនជោគជ័យ');
+        setError(S.guests.deleteFail);
       }
     };
 
     return (
       <section className="space-y-4 font-khmer-body">
-        <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
-          <h2 className="mb-5 font-khmer-heading text-2xl text-gray-900">ការគ្រប់គ្រងភ្ញៀវ</h2>
+        <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+          <h2 className="mb-5 font-khmer-heading text-2xl text-gray-900 dark:text-slate-100">{S.guests.title}</h2>
 
           <div className="mb-4 grid grid-cols-1 gap-3 xl:grid-cols-[minmax(220px,1.2fr)_220px_220px_auto]">
             <div className="relative">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-slate-400" />
               <Input
                 value={guestSearch ?? ''}
                 onChange={(e) => {
                   setGuestSearch(e.target.value ?? '');
                   setGuestPage(1);
                 }}
-                placeholder="ស្វែងរក..."
+                placeholder={S.guests.searchPh}
                 className="h-10 rounded-lg pl-10"
               />
             </div>
@@ -2071,12 +2236,12 @@ function EventDetailPage() {
                 setGuestGroupFilter(e.target.value);
                 setGuestPage(1);
               }}
-              className="h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm"
+              className="h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
             >
-              <option value="ALL">ក្រុម</option>
+              <option value="ALL">{S.guests.groupFilter}</option>
               {GUEST_GROUP_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
-                  {option.label}
+                  {getGuestGroupLabel(option.value, isKhmer, option.label)}
                 </option>
               ))}
             </select>
@@ -2087,12 +2252,12 @@ function EventDetailPage() {
                 setGuestTagFilter(e.target.value);
                 setGuestPage(1);
               }}
-              className="h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm"
+              className="h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
             >
-              <option value="ALL">ស្លាក</option>
+              <option value="ALL">{S.guests.tagFilter}</option>
               {GUEST_TAG_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
-                  {option.label}
+                  {getGuestTagLabel(option.value, isKhmer, option.label)}
                 </option>
               ))}
             </select>
@@ -2101,7 +2266,7 @@ function EventDetailPage() {
               <button
                 type="button"
                 onClick={handleCopySelected}
-                className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
                 title="Copy"
               >
                 <Copy className="h-4 w-4" />
@@ -2110,10 +2275,10 @@ function EventDetailPage() {
               <button
                 type="button"
                 onClick={handleExportGuestRows}
-                className="inline-flex h-10 items-center rounded-full border border-gray-200 bg-white px-4 text-sm text-gray-700 hover:bg-gray-50"
+                className="inline-flex h-10 items-center rounded-full border border-gray-200 bg-white px-4 text-sm text-gray-700 hover:bg-gray-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
               >
                 <Download className="mr-2 h-4 w-4" />
-                ទាញយក
+                {S.guests.export}
               </button>
 
               <Button
@@ -2122,7 +2287,7 @@ function EventDetailPage() {
                 onClick={() => setIsGuestFormOpen(true)}
               >
                 <Plus className="mr-1 h-4 w-4" />
-                បន្ថែមថ្មី
+                {S.guests.addNew}
               </Button>
 
               <button
@@ -2154,7 +2319,7 @@ function EventDetailPage() {
                   onClick={(e) => e.stopPropagation()}
                 >
                   <div className="mb-5 flex items-center justify-between">
-                    <h3 className="text-xl font-semibold text-gray-900">បន្ថែមភ្ញៀវថ្មី</h3>
+                    <h3 className="text-xl font-semibold text-gray-900">{S.guests.addGuestTitle}</h3>
                     <button
                       type="button"
                       className="inline-flex h-8 w-8 items-center justify-center rounded-md text-gray-500 hover:bg-gray-100"
@@ -2163,29 +2328,29 @@ function EventDetailPage() {
                       ×
                     </button>
                   </div>
-                  <p className="mb-4 text-sm text-gray-500">បំពេញព័ត៌មានលម្អិតរបស់ភ្ញៀវនៅខាងក្រោម</p>
+                  <p className="mb-4 text-sm text-gray-500">{S.guests.formHint}</p>
 
                   <form onSubmit={handleAddGuest} className="space-y-4">
                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                       <div className="space-y-1.5">
-                        <label className="text-sm text-gray-600">* ឈ្មោះ</label>
+                        <label className="text-sm text-gray-600">{S.guests.nameLabel}</label>
                         <Input
                           value={guestName ?? ''}
                           onChange={(e) => setGuestName(e.target.value ?? '')}
-                          placeholder="បញ្ចូលឈ្មោះ"
+                          placeholder={S.guests.namePh}
                           required
                           disabled={isSubmittingGuest}
                         />
                       </div>
 
                       <div className="space-y-1.5">
-                        <label className="text-sm text-gray-600">ទូរស័ព្ទ (មិនចាំបាច់)</label>
+                        <label className="text-sm text-gray-600">{S.guests.phoneLabel}</label>
                         <Input
                           value={guestPhone ?? ''}
                           onChange={(e) => setGuestPhone(sanitizeEnglishDigits(e.target.value ?? ''))}
                           onKeyDown={handleDigitsOnlyKeyDown}
                           onPaste={handleDigitsOnlyPaste}
-                          placeholder="បញ្ចូលលេខទូរស័ព្ទ។"
+                          placeholder={S.guests.phonePh}
                           disabled={isSubmittingGuest}
                           inputMode="numeric"
                           pattern="[0-9]*"
@@ -2194,7 +2359,7 @@ function EventDetailPage() {
                       </div>
 
                       <div className="space-y-1.5">
-                        <label className="text-sm text-gray-600">ក្រុម (មិនចាំបាច់)</label>
+                        <label className="text-sm text-gray-600">{S.guests.groupLabel}</label>
                         <select
                           value={guestGroup}
                           onChange={(e) => setGuestGroup(e.target.value)}
@@ -2203,14 +2368,14 @@ function EventDetailPage() {
                         >
                           {GUEST_GROUP_OPTIONS.map((option) => (
                             <option key={option.value} value={option.value}>
-                              {option.label}
+                              {getGuestGroupLabel(option.value, isKhmer, option.label)}
                             </option>
                           ))}
                         </select>
                       </div>
 
                       <div className="space-y-1.5">
-                        <label className="text-sm text-gray-600">ស្លាក (មិនចាំបាច់)</label>
+                        <label className="text-sm text-gray-600">{S.guests.tagLabel}</label>
                         <select
                           value={guestTag}
                           onChange={(e) => setGuestTag(e.target.value)}
@@ -2219,20 +2384,20 @@ function EventDetailPage() {
                         >
                           {GUEST_TAG_OPTIONS.map((option) => (
                             <option key={option.value} value={option.value}>
-                              {option.label}
+                              {getGuestTagLabel(option.value, isKhmer, option.label)}
                             </option>
                           ))}
                         </select>
                       </div>
 
                       <div className="space-y-1.5 md:col-span-2">
-                        <label className="text-sm text-gray-600">កំណត់ចំណាំ (មិនចាំបាច់)</label>
+                        <label className="text-sm text-gray-600">{S.guests.noteLabel}</label>
                         <textarea
                           value={guestNote}
                           onChange={(e) => setGuestNote(e.target.value)}
                           rows={3}
                           className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm outline-none focus:border-red-400"
-                          placeholder="បញ្ចូលកំណត់ចំណាំ"
+                          placeholder={S.guests.notePh}
                           disabled={isSubmittingGuest}
                         />
                       </div>
@@ -2246,14 +2411,14 @@ function EventDetailPage() {
                         onClick={() => setIsGuestFormOpen(false)}
                         disabled={isSubmittingGuest}
                       >
-                        ✕ បោះបង់
+                        ✕ {S.guests.cancel}
                       </Button>
                       <Button
                         type="submit"
                         className="bg-[#C52133] text-white hover:bg-[#aa1b2a]"
                         disabled={isSubmittingGuest}
                       >
-                        {isSubmittingGuest ? 'កំពុងបង្កើត...' : 'បង្កើតថ្មី'}
+                        {isSubmittingGuest ? S.guests.creating : S.guests.create}
                       </Button>
                     </div>
                   </form>
@@ -2262,9 +2427,9 @@ function EventDetailPage() {
             )}
           </AnimatePresence>
 
-          <div className="overflow-x-auto w-full max-w-full rounded-lg border border-gray-100">
+          <div className="overflow-x-auto w-full max-w-full rounded-lg border border-gray-100 dark:border-slate-700">
             <table className="min-w-[600px] table-auto text-sm whitespace-nowrap">
-              <thead className="bg-gray-50">
+              <thead className="bg-gray-50 dark:bg-slate-800">
                 <tr>
                   <th className="w-12 px-6 py-4 text-left">
                     <input
@@ -2280,29 +2445,29 @@ function EventDetailPage() {
                       }}
                     />
                   </th>
-                  <th className="px-6 py-4 text-left font-semibold text-gray-700">ឈ្មោះ</th>
-                  <th className="px-6 py-4 text-left font-semibold text-gray-700">លេខទូរស័ព្ទ</th>
-                  <th className="px-6 py-4 text-left font-semibold text-gray-700">ក្រុម</th>
-                  <th className="px-6 py-4 text-left font-semibold text-gray-700">ស្លាក</th>
-                  <th className="px-6 py-4 text-left font-semibold text-gray-700">ស្ថានភាព</th>
-                  <th className="px-6 py-4 text-left font-semibold text-gray-700">សារជូនពរ</th>
-                  <th className="px-6 py-4 text-left font-semibold text-gray-700">កំណត់ចំណាំ</th>
-                  <th className="px-6 py-4 text-right font-semibold text-gray-700">សកម្មភាព</th>
+                  <th className="px-6 py-4 text-left font-semibold text-gray-700 dark:text-slate-200">{S.guests.thName}</th>
+                  <th className="px-6 py-4 text-left font-semibold text-gray-700 dark:text-slate-200">{S.guests.thPhone}</th>
+                  <th className="px-6 py-4 text-left font-semibold text-gray-700 dark:text-slate-200">{S.guests.thGroup}</th>
+                  <th className="px-6 py-4 text-left font-semibold text-gray-700 dark:text-slate-200">{S.guests.thTag}</th>
+                  <th className="px-6 py-4 text-left font-semibold text-gray-700 dark:text-slate-200">{S.guests.thStatus}</th>
+                  <th className="px-6 py-4 text-left font-semibold text-gray-700 dark:text-slate-200">{S.guests.thGreeting}</th>
+                  <th className="px-6 py-4 text-left font-semibold text-gray-700 dark:text-slate-200">{S.guests.thNote}</th>
+                  <th className="px-6 py-4 text-right font-semibold text-gray-700 dark:text-slate-200">{S.guests.thActions}</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-gray-100 dark:divide-slate-700 dark:bg-slate-900">
                 {pageGuests.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="px-6 py-12 text-center text-gray-500 whitespace-nowrap">
-                      មិនមានទិន្នន័យ។
+                    <td colSpan={9} className="px-6 py-12 text-center text-gray-500 whitespace-nowrap dark:text-slate-400">
+                      {S.guests.noData}
                     </td>
                   </tr>
                 ) : (
                   pageGuests.map((guest) => {
-                    const statusMeta = getStatusMeta(guest.rsvpStatus || guest.status);
+                    const statusMeta = getStatusMeta(guest);
 
                     return (
-                      <tr key={guest.id} className="transition-colors hover:bg-gray-50">
+                      <tr key={guest.id} className="transition-colors hover:bg-gray-50 dark:hover:bg-slate-800">
                         <td className="px-6 py-4 whitespace-nowrap">
                           <input
                             type="checkbox"
@@ -2316,8 +2481,8 @@ function EventDetailPage() {
                             }}
                           />
                         </td>
-                        <td className="px-6 py-4 font-semibold text-gray-900 whitespace-nowrap">{guest.name}</td>
-                        <td className="px-6 py-4 text-gray-700 whitespace-nowrap">{guest.phone || '-'}</td>
+                        <td className="px-6 py-4 font-semibold text-gray-900 whitespace-nowrap dark:text-slate-100">{guest.name}</td>
+                        <td className="px-6 py-4 text-gray-700 whitespace-nowrap dark:text-slate-300">{guest.phone || '-'}</td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className={`inline-flex rounded-full px-2.5 py-1 text-xs ${getGroupBadgeClass(guest.group || 'GROOM_SIDE')} whitespace-nowrap`}>
                             {getGroupLabel(guest.group)}
@@ -2333,13 +2498,13 @@ function EventDetailPage() {
                             {statusMeta.label}
                           </span>
                         </td>
-                        <td className="px-6 py-4 text-gray-700 whitespace-nowrap">{guest.greetingMessage}</td>
-                        <td className="px-6 py-4 text-gray-700 whitespace-nowrap">{guest.note}</td>
+                        <td className="px-6 py-4 text-gray-700 whitespace-nowrap dark:text-slate-300">{guest.greetingMessage}</td>
+                        <td className="px-6 py-4 text-gray-700 whitespace-nowrap dark:text-slate-300">{guest.note}</td>
                         <td className="relative px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center justify-end gap-2">
                             <button
                               type="button"
-                              className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 bg-gray-100 text-gray-700 transition-colors hover:bg-gray-200"
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 bg-gray-100 text-gray-700 transition-colors hover:bg-gray-200 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
                               title="Share"
                               onClick={() => openSharePopover(guest)}
                             >
@@ -2347,7 +2512,7 @@ function EventDetailPage() {
                             </button>
                             <button
                               type="button"
-                              className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 bg-gray-100 text-gray-700 transition-colors hover:bg-gray-200"
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 bg-gray-100 text-gray-700 transition-colors hover:bg-gray-200 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
                               title="QR"
                               onClick={() => openQrModal(guest)}
                             >
@@ -2355,7 +2520,7 @@ function EventDetailPage() {
                             </button>
                             <button
                               type="button"
-                              className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 bg-gray-100 text-gray-700 transition-colors hover:bg-gray-200"
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 bg-gray-100 text-gray-700 transition-colors hover:bg-gray-200 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
                               title="Menu"
                               onClick={() => openActionMenu(guest.id)}
                             >
@@ -2376,22 +2541,20 @@ function EventDetailPage() {
                                   stiffness: 300,
                                   damping: 25
                                 }}
-                                className={`absolute right-6 z-100 w-56 rounded-lg bg-white font-khmer-body overflow-visible ${
-                                  guest === pageGuests[pageGuests.length - 1]
-                                    ? 'bottom-full mb-2'
-                                    : 'top-full mt-2'
-                                } shadow-xl border border-gray-100`}
+                                className={`absolute right-6 z-100 w-56 rounded-lg bg-white font-khmer-body overflow-visible dark:bg-slate-900 ${guest === pageGuests[pageGuests.length - 1]
+                                  ? 'bottom-full mb-2'
+                                  : 'top-full mt-2'
+                                  } shadow-xl border border-gray-100 dark:border-slate-700`}
                                 style={{
                                   filter: 'drop-shadow(0 10px 25px rgba(0, 0, 0, 0.1))'
                                 }}
                               >
                                 {/* Arrow pointing to button */}
                                 <div
-                                  className={`absolute right-6 w-3 h-3 bg-white border border-gray-100 rotate-45 ${
-                                    guest === pageGuests[pageGuests.length - 1]
-                                      ? '-bottom-1.5'
-                                      : '-top-1.5'
-                                  }`}
+                                  className={`absolute right-6 w-3 h-3 bg-white border border-gray-100 rotate-45 dark:bg-slate-900 dark:border-slate-700 ${guest === pageGuests[pageGuests.length - 1]
+                                    ? '-bottom-1.5'
+                                    : '-top-1.5'
+                                    }`}
                                   style={{
                                     borderRight: 'none',
                                     borderBottom: guest === pageGuests[pageGuests.length - 1] ? 'none' : '1px solid #f3f4f6'
@@ -2401,13 +2564,13 @@ function EventDetailPage() {
                                 <button
                                   type="button"
                                   onClick={() => openEditGuestModal(guest)}
-                                  className="flex w-full items-center gap-2 rounded-t-lg px-3 py-2 text-left text-sm text-gray-700 transition-colors hover:bg-amber-50"
+                                  className="flex w-full items-center gap-2 rounded-t-lg px-3 py-2 text-left text-sm text-gray-700 transition-colors hover:bg-amber-50 dark:text-slate-200 dark:hover:bg-slate-800"
                                 >
                                   <Pencil className="h-4 w-4 text-amber-600" />
-                                  កែសម្រួលភ្ញៀវ
+                                  {S.guests.editGuestMenu}
                                 </button>
 
-                                <div className="border-t border-gray-100" />
+                                <div className="border-t border-gray-100 dark:border-slate-700" />
 
                                 <button
                                   type="button"
@@ -2415,7 +2578,7 @@ function EventDetailPage() {
                                   className="flex w-full items-center gap-2 rounded-b-lg px-3 py-2 text-left text-sm text-red-500 transition-colors hover:bg-red-50"
                                 >
                                   <Trash2 className="h-4 w-4" />
-                                  លុបភ្ញៀវនេះ?
+                                  {S.guests.deleteThisGuest}
                                 </button>
                               </motion.div>
                             )}
@@ -2429,29 +2592,33 @@ function EventDetailPage() {
             </table>
           </div>
 
-          <div className="mt-4 flex flex-col gap-3 text-sm text-gray-600 md:flex-row md:items-center md:justify-between">
-            <p>សរុប: {totalRecords} កំណត់ត្រា</p>
+          <div className="mt-4 flex flex-col gap-3 text-sm text-gray-600 dark:text-slate-300 md:flex-row md:items-center md:justify-between">
+            <p>
+              {S.guests.totalLine}: {totalRecords} {S.guests.records}
+            </p>
 
             <div className="flex items-center gap-2">
-              <span>Rows per page:</span>
+              <span>{S.guests.perPage}:</span>
               <select
                 value={guestRowsPerPage}
                 onChange={(e) => {
                   setGuestRowsPerPage(Number(e.target.value));
                   setGuestPage(1);
                 }}
-                className="h-8 rounded-md border border-gray-200 bg-white px-2"
+                className="h-8 rounded-md border border-gray-200 bg-white px-2 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
               >
                 <option value={10}>10</option>
                 <option value={25}>25</option>
                 <option value={50}>50</option>
               </select>
 
-              <span className="ml-2">Page {totalPages === 0 ? 1 : safePage} of {totalPages}</span>
+              <span className="ml-2">
+                {S.guests.pageXofY} {totalPages === 0 ? 1 : safePage} {S.guests.ofWord} {totalPages}
+              </span>
 
               <button
                 type="button"
-                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-gray-200 bg-white disabled:opacity-40"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-gray-200 bg-white dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 disabled:opacity-40"
                 disabled={totalPages === 0 || safePage <= 1}
                 onClick={() => setGuestPage((prev) => Math.max(1, prev - 1))}
               >
@@ -2460,7 +2627,7 @@ function EventDetailPage() {
 
               <button
                 type="button"
-                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-gray-200 bg-white disabled:opacity-40"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-gray-200 bg-white dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 disabled:opacity-40"
                 disabled={totalPages === 0 || safePage >= totalPages}
                 onClick={() => setGuestPage((prev) => prev + 1)}
               >
@@ -2487,27 +2654,27 @@ function EventDetailPage() {
                 onClick={(e) => e.stopPropagation()}
                 className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl font-khmer-body"
               >
-                <h3 className="font-khmer-heading text-2xl text-black">កែសម្រួលភ្ញៀវ</h3>
-                <p className="mt-2 text-sm text-gray-500">បំពេញព័ត៌មានលម្អិតរបស់ភ្ញៀវនៅខាងក្រោម</p>
+                <h3 className="font-khmer-heading text-2xl text-black">{S.guests.editGuestTitle}</h3>
+                <p className="mt-2 text-sm text-gray-500">{S.guests.editHint}</p>
 
                 <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
                   <div>
-                    <label className="mb-2 block text-sm text-gray-700">* ឈ្មោះ</label>
+                    <label className="mb-2 block text-sm text-gray-700">{S.guests.nameLabel}</label>
                     <Input
                       value={editGuestName ?? ''}
                       onChange={(e) => setEditGuestName(e.target.value ?? '')}
-                      placeholder="បញ្ចូលឈ្មោះ"
+                      placeholder={S.guests.namePh}
                       className="border-gray-200 bg-gray-50"
                     />
                   </div>
                   <div>
-                    <label className="mb-2 block text-sm text-gray-700">ទូរស័ព្ទ (មិនចាំបាច់)</label>
+                    <label className="mb-2 block text-sm text-gray-700">{S.guests.phoneLabel}</label>
                     <Input
                       value={editGuestPhone ?? ''}
                       onChange={(e) => setEditGuestPhone(sanitizeEnglishDigits(e.target.value ?? ''))}
                       onKeyDown={handleDigitsOnlyKeyDown}
                       onPaste={handleDigitsOnlyPaste}
-                      placeholder="បញ្ចូលលេខទូរស័ព្ទ។"
+                      placeholder={S.guests.phonePh}
                       className="border-gray-200 bg-gray-50"
                       inputMode="numeric"
                       pattern="[0-9]*"
@@ -2516,40 +2683,42 @@ function EventDetailPage() {
                   </div>
 
                   <div>
-                    <label className="mb-2 block text-sm text-gray-700">ក្រុម (មិនចាំបាច់)</label>
+                    <label className="mb-2 block text-sm text-gray-700">{S.guests.groupLabel}</label>
                     <select
                       value={editGuestGroup}
                       onChange={(e) => setEditGuestGroup(e.target.value)}
                       className="h-10 w-full rounded-md border border-gray-200 bg-gray-50 px-3 text-sm"
                     >
-                      <option value="GROOM_SIDE">ខាងកូនកំលោះ</option>
-                      <option value="BRIDE_SIDE">ខាងកូនក្រមុំ</option>
+                      {GUEST_GROUP_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {getGuestGroupLabel(option.value, isKhmer, option.label)}
+                        </option>
+                      ))}
                     </select>
                   </div>
 
                   <div>
-                    <label className="mb-2 block text-sm text-gray-700">ស្លាក (មិនចាំបាច់)</label>
+                    <label className="mb-2 block text-sm text-gray-700">{S.guests.tagLabel}</label>
                     <select
                       value={editGuestTag}
                       onChange={(e) => setEditGuestTag(e.target.value)}
                       className="h-10 w-full rounded-md border border-gray-200 bg-gray-50 px-3 text-sm"
                     >
-                      <option value="HIGH_SCHOOL_FRIEND">មិត្តភក្តិវិទ្យាល័យ</option>
-                      <option value="COLLEGE_FRIEND">មិត្តភក្តិឧត្តមសិក្សា</option>
-                      <option value="FRIEND">មិត្តភក្តិ</option>
-                      <option value="TEAMWORK">ការងារក្រុម</option>
-                      <option value="RELATIVE">សាច់ញាតិ</option>
-                      <option value="OTHERS">ផ្សេងៗ</option>
+                      {GUEST_TAG_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {getGuestTagLabel(option.value, isKhmer, option.label)}
+                        </option>
+                      ))}
                     </select>
                   </div>
 
                   <div className="md:col-span-2">
-                    <label className="mb-2 block text-sm text-gray-700">កំណត់ចំណាំ (មិនចាំបាច់)</label>
+                    <label className="mb-2 block text-sm text-gray-700">{S.guests.noteLabel}</label>
                     <textarea
                       value={editGuestNote}
                       onChange={(e) => setEditGuestNote(e.target.value)}
                       className="min-h-24 w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:border-gray-300"
-                      placeholder="បញ្ចូលកំណត់ចំណាំ"
+                      placeholder={S.guests.notePh}
                     />
                   </div>
                 </div>
@@ -2560,14 +2729,14 @@ function EventDetailPage() {
                     onClick={() => setIsEditGuestModalOpen(false)}
                     className="rounded-md bg-gray-100 px-4 py-2 text-sm text-gray-700 hover:bg-gray-200"
                   >
-                    ✕ បោះបង់
+                    ✕ {S.guests.cancel}
                   </button>
                   <button
                     type="button"
                     onClick={handleSaveEditedGuest}
                     className="rounded-md bg-[#C52133] px-4 py-2 text-sm text-white hover:bg-[#aa1b2a]"
                   >
-                    រក្សាទុក
+                    {S.guests.save}
                   </button>
                 </div>
               </motion.div>
@@ -2590,7 +2759,7 @@ function EventDetailPage() {
                 onClick={(e) => e.stopPropagation()}
                 className="w-full max-w-xl rounded-3xl bg-white p-5 shadow-xl"
               >
-                <h3 className="font-khmer-body text-xl font-semibold text-gray-900">តំណអញ្ជើញ</h3>
+                <h3 className="font-khmer-body text-xl font-semibold text-gray-900">{S.guests.linkTitle}</h3>
                 {shareNotice && <p className="mt-1 text-sm text-emerald-600">{shareNotice}</p>}
 
                 <div className="mt-4 flex items-start gap-4">
@@ -2648,7 +2817,7 @@ function EventDetailPage() {
                 className="w-full max-w-md rounded-3xl bg-white p-6 shadow-xl"
               >
                 <div className="mb-4 flex items-center justify-between">
-                  <h3 className="font-khmer-body text-xl font-semibold text-gray-900">QR Code</h3>
+                  <h3 className="font-khmer-body text-xl font-semibold text-gray-900">{S.guests.qrCodeLabel}</h3>
                   <button
                     type="button"
                     onClick={() => setIsQrModalOpen(false)}
@@ -2661,13 +2830,13 @@ function EventDetailPage() {
                 <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-gray-100">
                   <img
                     src={`https://api.qrserver.com/v1/create-qr-code/?size=700x700&data=${encodeURIComponent(qrLink)}`}
-                    alt="Guest QR Code"
+                    alt={S.guests.qrCodeLabel}
                     className="mx-auto h-64 w-64 rounded-xl bg-white object-contain"
                   />
                 </div>
 
                 <p className="mt-3 text-center text-sm text-gray-700">{qrGuestName}</p>
-                <p className="mt-1 text-center text-xs text-gray-500">ស្កេនដើម្បីមើលធៀបអញ្ជើញ</p>
+                <p className="mt-1 text-center text-xs text-gray-500">{S.guests.scanHint}</p>
 
                 <div className="mt-6">
                   <button
@@ -2676,7 +2845,7 @@ function EventDetailPage() {
                     className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-[#C52133] bg-white px-8 py-3 font-khmer-body text-sm font-semibold text-[#C52133] transition-colors hover:bg-rose-50"
                   >
                     <Download className="h-4 w-4" />
-                    ទាញយក QR កូដ
+                    {S.guests.downloadQrBtn}
                   </button>
                 </div>
               </motion.div>
@@ -2713,8 +2882,14 @@ function EventDetailPage() {
     });
 
     const selectedGiftGuest = guests.find((guest) => guest.id === giftGuestId);
-    const selectedGiftGuestGroup = GUEST_GROUP_OPTIONS.find((item) => item.value === (selectedGiftGuest?.group || 'GROOM_SIDE'))?.label || 'ខាងកូនកំលោះ';
-    const selectedGiftGuestTag = GUEST_TAG_OPTIONS.find((item) => item.value === (selectedGiftGuest?.tag || 'OTHERS'))?.label || 'ផ្សេងៗ';
+    const groupOpt = GUEST_GROUP_OPTIONS.find((item) => item.value === (selectedGiftGuest?.group || 'GROOM_SIDE'));
+    const tagOpt = GUEST_TAG_OPTIONS.find((item) => item.value === (selectedGiftGuest?.tag || 'OTHERS'));
+    const selectedGiftGuestGroup = groupOpt
+      ? getGuestGroupLabel(groupOpt.value, isKhmer, groupOpt.label)
+      : getGuestGroupLabel('GROOM_SIDE', isKhmer, GUEST_GROUP_OPTIONS[0].label);
+    const selectedGiftGuestTag = tagOpt
+      ? getGuestTagLabel(tagOpt.value, isKhmer, tagOpt.label)
+      : getGuestTagLabel('OTHERS', isKhmer, GUEST_TAG_OPTIONS.find((o) => o.value === 'OTHERS')?.label || '');
     const selectedGuestGiftRows = selectedGiftGuest
       ? giftRows.filter((row) => row.guestId === selectedGiftGuest.id)
       : [];
@@ -2833,27 +3008,27 @@ function EventDetailPage() {
 
     const handleCreateGift = async () => {
       if (!selectedGiftGuest) {
-        setError('សូមជ្រើសរើសភ្ញៀវជាមុនសិន');
+        setError(S.gifts.errSelectGuest);
         setSuccess('');
         return;
       }
 
       if (!editingGiftRowId && selectedGuestGiftRows.length > 0) {
-        setError('ភ្ញៀវនេះបានចងដៃរួចហើយ មិនអាចបង្កើតថ្មីម្ដងទៀតបានទេ');
+        setError(S.gifts.errDuplicate);
         setSuccess('');
         return;
       }
 
       const parsedAmount = Number(String(giftAmount || '0').replace(/,/g, ''));
       if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
-        setError('សូមបញ្ចូលចំនួនទឹកប្រាក់ឲ្យត្រឹមត្រូវ');
+        setError(S.gifts.errInvalidAmount);
         setSuccess('');
         return;
       }
 
       try {
         if (!editingGiftRowId) {
-          const confirmed = window.confirm('តើអ្នកចង់បង្កើតចំណងដៃថ្មីមែនទេ?');
+          const confirmed = await requestConfirmation(S.gifts.confirmNewGift);
           if (!confirmed) return;
         }
 
@@ -2868,7 +3043,7 @@ function EventDetailPage() {
 
           const updatedRow = mapGiftToRow(updated);
           setGiftRows((prev) => prev.map((row) => (row.id === editingGiftRowId ? updatedRow : row)));
-          setSuccess('បានកែប្រែចំណងដៃរួចរាល់');
+          setSuccess(S.gifts.updateSuccess);
         } else {
           const created = await apiClient.createGift(eventId, {
             guestId: selectedGiftGuest.id,
@@ -2879,7 +3054,7 @@ function EventDetailPage() {
           });
 
           setGiftRows((prev) => [mapGiftToRow(created), ...prev]);
-          setSuccess('បានបន្ថែមចំណងដៃថ្មីរួចរាល់');
+          setSuccess(S.gifts.addSuccess);
         }
 
         setError('');
@@ -2890,13 +3065,13 @@ function EventDetailPage() {
         if (Array.isArray(message)) {
           setError(message.join(', '));
         } else {
-          setError(message || 'មិនអាចរក្សាទុកចំណងដៃបានទេ');
+          setError(message || S.gifts.saveFail);
         }
       }
     };
 
     const handleDeleteGiftRow = async (id: string) => {
-      const confirmed = window.confirm('តើអ្នកចង់លុបចំណងដៃនេះមែនទេ?');
+      const confirmed = await requestConfirmation(S.gifts.confirmDeleteOne);
       if (!confirmed) return;
 
       try {
@@ -2906,22 +3081,26 @@ function EventDetailPage() {
         setError('');
       } catch {
         setSuccess('');
-        setError('មិនអាចលុបទិន្នន័យចំណងដៃបានទេ');
+        setError(S.gifts.deleteFail);
       }
     };
 
     const handleDeleteSelectedGiftRows = async () => {
       const targetIds = selectedGiftRowIds.length > 0 ? selectedGiftRowIds : giftRows.map((row) => row.id);
       if (targetIds.length === 0) {
-        setError('មិនមានទិន្នន័យសម្រាប់លុបទេ');
+        setError(S.gifts.deleteNoData);
         setSuccess('');
         return;
       }
 
       const confirmed =
         selectedGiftRowIds.length > 0
-          ? window.confirm(`តើអ្នកចង់លុបចំណងដៃចំនួន ${targetIds.length} មែនទេ?`)
-          : window.confirm('មិនបានជ្រើសចំណងដៃ។ តើអ្នកចង់លុបទាំងអស់មែនទេ?');
+          ? await requestConfirmation(
+            isKhmer
+              ? `តើអ្នកចង់លុបចំណងដៃចំនួន ${targetIds.length} មែនទេ?`
+              : `Delete ${targetIds.length} gift(s)?`,
+          )
+          : await requestConfirmation(S.gifts.deleteAllPrompt);
       if (!confirmed) return;
 
       try {
@@ -2932,17 +3111,17 @@ function EventDetailPage() {
         if (deletedIds.length > 0) {
           setGiftRows((prev) => prev.filter((row) => !deletedIds.includes(row.id)));
           setSelectedGiftRowIds((prev) => prev.filter((id) => !deletedIds.includes(id)));
-          setSuccess('បានលុបទិន្នន័យចំណងដៃរួចរាល់');
+          setSuccess(S.gifts.deleteSuccess);
           setError('');
         }
 
         if (failedCount > 0) {
           setSuccess('');
-          setError('មិនអាចលុបទិន្នន័យចំណងដៃមួយចំនួនបានទេ');
+          setError(S.gifts.deleteSomeFail);
         }
       } catch {
         setSuccess('');
-        setError('មិនអាចលុបទិន្នន័យចំណងដៃមួយចំនួនបានទេ');
+        setError(S.gifts.deleteSomeFail);
       }
     };
 
@@ -2953,13 +3132,13 @@ function EventDetailPage() {
           : giftRows;
 
       if (rowsToExport.length === 0) {
-        setError('មិនមានទិន្នន័យសម្រាប់ទាញយកទេ');
+        setError(S.gifts.giftExportNoData);
         setSuccess('');
         return;
       }
 
       setError('');
-      setSuccess('កំពុងរៀបចំឯកសារ Excel...');
+      setSuccess(S.gifts.giftPreparing);
 
       const exchangeRateForExport = 4000;
       const exportRows = rowsToExport.map((row, index) => {
@@ -2991,10 +3170,10 @@ function EventDetailPage() {
         const safeEventName = (event?.title || 'event').replace(/[\\/:*?"<>|]/g, '-');
         XLSX.writeFile(workbook, `${safeEventName}_GiftList_${stamp}.xlsx`);
 
-        setSuccess('ទាញយកបានជោគជ័យ!');
+        setSuccess(S.gifts.giftExportOk);
       } catch {
         setSuccess('');
-        setError('មិនអាចទាញយកឯកសារ Excel បានទេ');
+        setError(S.gifts.giftExportFail);
       }
     };
 
@@ -3022,59 +3201,61 @@ function EventDetailPage() {
       }).format(value || 0);
     };
 
-    const currencyLabel = (value: 'USD' | 'KHR') => (value === 'USD' ? 'ប្រាក់ដុល្លារ ($)' : 'ប្រាក់រៀល (៛)');
-    const paymentLabel = (value: 'CASH' | 'KHQR') => (value === 'CASH' ? 'Cash' : 'KHQR');
+    const currencyLabel = (value: 'USD' | 'KHR') =>
+      value === 'USD' ? S.gifts.currencyUsd : S.gifts.currencyKhr;
+    const paymentLabel = (value: 'CASH' | 'KHQR') =>
+      value === 'CASH' ? S.gifts.payCash : S.gifts.payKhqr;
 
     return (
-      <section className="space-y-4 rounded-2xl bg-gray-50 p-4 font-khmer-body">
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <div className="flex h-32 items-center justify-between rounded-2xl border border-blue-100 bg-white p-5 shadow-sm">
+      <section className="space-y-4 rounded-2xl bg-gray-50 p-4 font-khmer-body dark:bg-slate-950">
+        <div className="flex gap-4 overflow-x-auto pb-2 md:grid md:grid-cols-2 md:overflow-visible xl:grid-cols-4">
+          <div className="flex h-32 min-w-[250px] items-center justify-between rounded-2xl border border-blue-100 bg-white p-5 shadow-sm md:min-w-0 dark:border-slate-700 dark:bg-slate-900">
             <div className="flex items-center gap-3">
               <span className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-blue-50 text-blue-600">
                 <Users className="h-5 w-5" />
               </span>
-              <p className="text-sm text-gray-600">ចំណងដៃដែលបានទទួល</p>
+              <p className="text-sm text-gray-600 dark:text-slate-300">{S.gifts.summaryReceived}</p>
             </div>
-            <p className="font-khmer-heading text-3xl text-gray-900">{formatAmount(receivedGiftCount)}</p>
+            <p className="font-khmer-heading text-3xl text-gray-900 dark:text-slate-100">{formatAmount(receivedGiftCount)}</p>
           </div>
 
-          <div className="flex h-32 items-center justify-between rounded-2xl border border-emerald-100 bg-white p-5 shadow-sm">
+          <div className="flex h-32 min-w-[250px] items-center justify-between rounded-2xl border border-emerald-100 bg-white p-5 shadow-sm md:min-w-0 dark:border-slate-700 dark:bg-slate-900">
             <div className="flex items-center gap-3">
               <span className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
                 <DollarSign className="h-5 w-5" />
               </span>
-              <p className="text-sm text-gray-600">សរុប ដុល្លារ ($)</p>
+              <p className="text-sm text-gray-600 dark:text-slate-300">{S.gifts.totalUsd}</p>
             </div>
-            <p className="font-khmer-heading text-3xl text-gray-900">{formatUsd(totalUsd)}</p>
+            <p className="font-khmer-heading text-3xl text-gray-900 dark:text-slate-100">{formatUsd(totalUsd)}</p>
           </div>
 
-          <div className="flex h-32 items-center justify-between rounded-2xl border border-violet-100 bg-white p-5 shadow-sm">
+          <div className="flex h-32 min-w-[250px] items-center justify-between rounded-2xl border border-violet-100 bg-white p-5 shadow-sm md:min-w-0 dark:border-slate-700 dark:bg-slate-900">
             <div className="flex items-center gap-3">
               <span className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-violet-50 text-violet-600 font-semibold">
                 ៛
               </span>
-              <p className="text-sm text-gray-600">សរុប រៀល (៛)</p>
+              <p className="text-sm text-gray-600 dark:text-slate-300">{S.gifts.totalKhr}</p>
             </div>
-            <p className="font-khmer-heading text-3xl text-gray-900">{formatAmount(totalKhr)}</p>
+            <p className="font-khmer-heading text-3xl text-gray-900 dark:text-slate-100">{formatAmount(totalKhr)}</p>
           </div>
 
-          <div className="flex h-32 flex-col justify-between rounded-2xl border border-rose-100 bg-white p-5 shadow-sm">
+          <div className="flex h-32 min-w-[250px] flex-col justify-between rounded-2xl border border-rose-100 bg-white p-5 shadow-sm md:min-w-0 dark:border-slate-700 dark:bg-slate-900">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <span className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-rose-50 text-rose-600">
                   <TrendingUp className="h-5 w-5" />
                 </span>
-                <p className="text-sm text-gray-600">សរុបជាដុល្លារ</p>
+                <p className="text-sm text-gray-600 dark:text-slate-300">{S.gifts.totalAsUsd}</p>
               </div>
-              <p className="font-khmer-heading text-3xl text-gray-900">{formatUsd(totalAsUsd)}</p>
+              <p className="font-khmer-heading text-3xl text-gray-900 dark:text-slate-100">{formatUsd(totalAsUsd)}</p>
             </div>
-            <p className="text-xs text-gray-500">1 USD = 4000 KHR</p>
+            <p className="text-xs text-gray-500 dark:text-slate-400">{S.gifts.exchangeNote}</p>
           </div>
         </div>
 
-        <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
+        <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <h2 className="font-khmer-heading text-2xl text-gray-900">បញ្ជីចំណងដៃ</h2>
+            <h2 className="font-khmer-heading text-2xl text-gray-900 dark:text-slate-100">{S.gifts.title}</h2>
 
             <div className="flex flex-wrap items-center gap-2">
               <button
@@ -3083,47 +3264,47 @@ function EventDetailPage() {
                 className="inline-flex h-10 items-center rounded-lg bg-[#7A1F2B] px-4 text-sm font-medium text-white hover:bg-[#651925]"
               >
                 <Plus className="mr-1 h-4 w-4" />
-                បន្ថែមថ្មី
+                {S.gifts.add}
               </button>
 
               <button
                 type="button"
                 onClick={handleExportGiftRows}
-                className="inline-flex h-10 items-center rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 hover:bg-gray-50"
+                className="inline-flex h-10 items-center rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 hover:bg-gray-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
               >
                 <Download className="mr-1 h-4 w-4" />
-                ទាញយក
+                {S.gifts.export}
               </button>
 
               <button
                 type="button"
                 onClick={handleDeleteSelectedGiftRows}
-                className="inline-flex h-10 items-center rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 hover:bg-gray-50"
+                className="inline-flex h-10 items-center rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 hover:bg-gray-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
               >
                 <Trash2 className="mr-1 h-4 w-4" />
-                លុប
+                {S.gifts.delete}
               </button>
             </div>
           </div>
 
           <div className="mb-4">
             <div className="relative max-w-md">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-slate-400" />
               <Input
                 value={giftSearch}
                 onChange={(e) => {
                   setGiftSearch(e.target.value);
                   setGiftPage(1);
                 }}
-                placeholder="ស្វែងរក ..."
+                placeholder={S.gifts.searchPh}
                 className="h-11 rounded-full border-gray-200 pl-10"
               />
             </div>
           </div>
 
-          <div className="overflow-x-auto whitespace-nowrap max-w-full rounded-xl border border-gray-100 bg-white scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
+          <div className="overflow-x-auto whitespace-nowrap max-w-full rounded-xl border border-gray-100 bg-white scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 dark:border-slate-700 dark:bg-slate-900 dark:scrollbar-thumb-slate-600 dark:scrollbar-track-slate-800">
             <table className="min-w-full table-auto text-sm">
-              <thead className="bg-gray-50">
+              <thead className="bg-gray-50 dark:bg-slate-800">
                 <tr>
                   <th className="w-12 px-5 py-3 text-left">
                     <input
@@ -3139,26 +3320,26 @@ function EventDetailPage() {
                       }}
                     />
                   </th>
-                  <th className="px-5 py-3 text-left font-semibold text-gray-700 sticky left-0 z-10 bg-white">ឈ្មោះភ្ញៀវ</th>
-                  <th className="px-5 py-3 text-left font-semibold text-gray-700">លេខទូរស័ព្ទ</th>
-                  <th className="px-5 py-3 text-left font-semibold text-gray-700">ប្រភេទការទូទាត់</th>
-                  <th className="px-5 py-3 text-left font-semibold text-gray-700">ប្រភេទរូបិយប័ណ្ណ</th>
-                  <th className="px-5 py-3 text-left font-semibold text-gray-700">ចំនួនទឹកប្រាក់</th>
-                  <th className="px-5 py-3 text-left font-semibold text-gray-700">កំណត់ចំណាំ</th>
-                  <th className="px-5 py-3 text-right font-semibold text-gray-700">សកម្មភាព</th>
+                  <th className="px-5 py-3 text-left font-semibold text-gray-700 sticky left-0 z-10 bg-white dark:bg-slate-900 dark:text-slate-200">{S.gifts.thGuest}</th>
+                  <th className="px-5 py-3 text-left font-semibold text-gray-700 dark:text-slate-200">{S.gifts.thPhone}</th>
+                  <th className="px-5 py-3 text-left font-semibold text-gray-700 dark:text-slate-200">{S.gifts.thPayType}</th>
+                  <th className="px-5 py-3 text-left font-semibold text-gray-700 dark:text-slate-200">{S.gifts.thCurrency}</th>
+                  <th className="px-5 py-3 text-left font-semibold text-gray-700 dark:text-slate-200">{S.gifts.thAmount}</th>
+                  <th className="px-5 py-3 text-left font-semibold text-gray-700 dark:text-slate-200">{S.gifts.thNote}</th>
+                  <th className="px-5 py-3 text-right font-semibold text-gray-700 dark:text-slate-200">{S.gifts.thActions}</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100 bg-white">
+              <tbody className="divide-y divide-gray-100 bg-white dark:divide-slate-700 dark:bg-slate-900">
                 {pagedGiftRows.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="px-5 py-14 text-center text-gray-500">
-                      មិនមានទិន្នន័យ។
+                    <td colSpan={8} className="px-5 py-14 text-center text-gray-500 dark:text-slate-400">
+                      {S.gifts.noData}
                     </td>
                   </tr>
                 )}
 
                 {pagedGiftRows.map((row) => (
-                  <tr key={row.id} className="hover:bg-gray-50">
+                  <tr key={row.id} className="hover:bg-gray-50 dark:hover:bg-slate-800">
                     <td className="px-5 py-3">
                       <input
                         type="checkbox"
@@ -3172,7 +3353,7 @@ function EventDetailPage() {
                         }}
                       />
                     </td>
-                    <td className="px-5 py-3 text-gray-900 sticky left-0 z-10 bg-white">
+                    <td className="px-5 py-3 text-gray-900 sticky left-0 z-10 bg-white dark:bg-slate-900 dark:text-slate-100">
                       <div className="inline-flex items-center gap-2">
                         <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-rose-50 text-[#C52133]">
                           <User className="h-4 w-4" />
@@ -3180,47 +3361,44 @@ function EventDetailPage() {
                         <span>{row.guestName}</span>
                       </div>
                     </td>
-                    <td className="px-5 py-3 text-gray-700">{row.phone || '-'}</td>
+                    <td className="px-5 py-3 text-gray-700 dark:text-slate-300">{row.phone || '-'}</td>
                     <td className="px-5 py-3">
                       <span
-                        className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${
-                          row.paymentType === 'CASH'
-                            ? 'bg-emerald-100 text-emerald-700'
-                            : 'bg-sky-100 text-sky-700'
-                        }`}
+                        className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${row.paymentType === 'CASH'
+                          ? 'bg-emerald-100 text-emerald-700'
+                          : 'bg-sky-100 text-sky-700'
+                          }`}
                       >
                         {paymentLabel(row.paymentType)}
                       </span>
                     </td>
                     <td className="px-5 py-3">
                       <span
-                        className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${
-                          row.currencyType === 'USD'
-                            ? 'bg-blue-100 text-blue-700'
-                            : 'bg-violet-100 text-violet-700'
-                        }`}
+                        className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${row.currencyType === 'USD'
+                          ? 'bg-blue-100 text-blue-700'
+                          : 'bg-violet-100 text-violet-700'
+                          }`}
                       >
                         {currencyLabel(row.currencyType)}
                       </span>
                     </td>
                     <td className="px-5 py-3">
                       <span
-                        className={`inline-flex items-center rounded-lg px-2.5 py-1 text-sm font-semibold ${
-                          row.currencyType === 'USD'
-                            ? 'bg-blue-50 text-blue-700'
-                            : 'bg-violet-50 text-violet-700'
-                        }`}
+                        className={`inline-flex items-center rounded-lg px-2.5 py-1 text-sm font-semibold ${row.currencyType === 'USD'
+                          ? 'bg-blue-50 text-blue-700'
+                          : 'bg-violet-50 text-violet-700'
+                          }`}
                       >
                         {row.currencyType === 'USD' ? '$' : '៛'} {formatAmount(row.amount)}
                       </span>
                     </td>
-                    <td className="px-5 py-3 text-gray-700">{row.note || '-'}</td>
+                    <td className="px-5 py-3 text-gray-700 dark:text-slate-300">{row.note || '-'}</td>
                     <td className="px-5 py-3">
                       <div className="flex items-center justify-end gap-2">
                         <button
                           type="button"
                           onClick={() => handleOpenEditGiftModal(row)}
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
                           title="Edit"
                         >
                           <Pencil className="h-4 w-4" />
@@ -3241,51 +3419,55 @@ function EventDetailPage() {
             </table>
           </div>
 
-          <div className="mt-4 flex flex-col gap-3 text-sm text-gray-600 md:flex-row md:items-center md:justify-between">
-            <p>សរុប: {totalGiftRecords} កំណត់ត្រា</p>
+          <div className="mt-4 flex flex-col gap-3 text-sm text-gray-600 dark:text-slate-300 md:flex-row md:items-center md:justify-between">
+            <p>
+              {S.gifts.totalLine}: {totalGiftRecords} {S.gifts.records}
+            </p>
 
             <div className="flex flex-wrap items-center gap-2">
-              <span>ទិន្នន័យក្នុងមួយទំព័រ</span>
+              <span>{S.gifts.perPage}</span>
               <select
                 value={giftRowsPerPage}
                 onChange={(e) => {
                   setGiftRowsPerPage(Number(e.target.value));
                   setGiftPage(1);
                 }}
-                className="h-8 rounded-md border border-gray-200 bg-white px-2"
+                className="h-8 rounded-md border border-gray-200 bg-white px-2 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
               >
                 <option value={10}>10</option>
                 <option value={25}>25</option>
                 <option value={50}>50</option>
               </select>
 
-              <span className="ml-2">ទំព័រ {safeGiftPage} នៃ {totalGiftPages}</span>
+              <span className="ml-2">
+                {S.gifts.pageOf} {safeGiftPage} {S.gifts.ofWord} {totalGiftPages}
+              </span>
 
               <button
                 type="button"
                 onClick={() => setGiftPage(1)}
                 disabled={safeGiftPage <= 1}
-                className="rounded-md border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700 disabled:cursor-not-allowed disabled:opacity-40"
+                className="rounded-md border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 disabled:cursor-not-allowed disabled:opacity-40"
               >
-                ទៅទំព័រដំបូង
+                {S.gifts.goFirst}
               </button>
 
               <button
                 type="button"
                 onClick={() => setGiftPage((prev) => Math.max(1, prev - 1))}
                 disabled={safeGiftPage <= 1}
-                className="rounded-md border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700 disabled:cursor-not-allowed disabled:opacity-40"
+                className="rounded-md border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 disabled:cursor-not-allowed disabled:opacity-40"
               >
-                ទៅទំព័រមុន
+                {S.gifts.goPrev}
               </button>
 
               <button
                 type="button"
                 onClick={() => setGiftPage((prev) => Math.min(totalGiftPages, prev + 1))}
                 disabled={safeGiftPage >= totalGiftPages}
-                className="rounded-md border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700 disabled:cursor-not-allowed disabled:opacity-40"
+                className="rounded-md border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 disabled:cursor-not-allowed disabled:opacity-40"
               >
-                ទៅទំព័របន្ទាប់
+                {S.gifts.goNext}
               </button>
             </div>
           </div>
@@ -3308,11 +3490,13 @@ function EventDetailPage() {
                 onClick={(event) => event.stopPropagation()}
                 className="flex w-full max-w-6xl flex-col rounded-3xl bg-white p-2 sm:p-6 shadow-2xl max-h-[98svh] sm:max-h-[86vh] overflow-y-auto"
               >
-                <h3 className="font-khmer-heading text-xl sm:text-2xl text-gray-900">បន្ថែមចំណងដៃថ្មី</h3>
+                <h3 className="font-khmer-heading text-xl sm:text-2xl text-gray-900">
+                  {editingGiftRowId ? S.gifts.modalTitleEdit : S.gifts.addTitle}
+                </h3>
 
                 <div className="mt-3 flex flex-col gap-4 sm:mt-5 sm:grid sm:min-h-0 sm:flex-1 sm:grid-cols-1 sm:gap-5 lg:grid-cols-[360px_minmax(0,1fr)]">
                   <div className="min-h-0 rounded-3xl border border-gray-100 bg-gray-50 p-3 sm:p-4">
-                    <label className="mb-2 block text-sm text-gray-700">ភ្ញៀវ</label>
+                    <label className="mb-2 block text-sm text-gray-700">{S.gifts.labelGuest}</label>
                     <div ref={giftGuestMenuRef} className="relative">
                       <button
                         type="button"
@@ -3322,7 +3506,7 @@ function EventDetailPage() {
                         <span className="truncate">
                           {selectedGiftGuest
                             ? `${selectedGiftGuest.name} • ${selectedGiftGuestGroup} • ${selectedGiftGuestTag}`
-                            : 'ជ្រើសរើសភ្ញៀវ'}
+                            : S.gifts.selectGuest}
                         </span>
                         <ChevronRight className={`h-4 w-4 text-gray-400 transition-transform ${isGiftGuestMenuOpen ? 'rotate-90' : ''}`} />
                       </button>
@@ -3334,22 +3518,25 @@ function EventDetailPage() {
                             <Input
                               value={giftGuestSearch}
                               onChange={(e) => setGiftGuestSearch(e.target.value)}
-                              placeholder="ស្វែងរកភ្ញៀវ..."
+                              placeholder={S.gifts.searchGuest}
                               className="h-10 rounded-full pl-9"
                             />
                           </div>
 
                           <div className="mt-3 max-h-[44vh] space-y-2 overflow-auto pr-1">
                             {filteredGuestsForGift.length === 0 ? (
-                              <p className="rounded-2xl bg-gray-50 px-3 py-4 text-sm text-gray-500">មិនមានភ្ញៀវ</p>
+                              <p className="rounded-2xl bg-gray-50 px-3 py-4 text-sm text-gray-500">{S.gifts.noGuestsInList}</p>
                             ) : (
                               filteredGuestsForGift.map((guest) => {
                                 const isActive = giftGuestId === guest.id;
-                                const groupLabel =
-                                  GUEST_GROUP_OPTIONS.find((item) => item.value === (guest.group || 'GROOM_SIDE'))?.label ||
-                                  'ខាងកូនកំលោះ';
-                                const tagLabel =
-                                  GUEST_TAG_OPTIONS.find((item) => item.value === (guest.tag || 'OTHERS'))?.label || 'ផ្សេងៗ';
+                                const go = GUEST_GROUP_OPTIONS.find((item) => item.value === (guest.group || 'GROOM_SIDE'));
+                                const to = GUEST_TAG_OPTIONS.find((item) => item.value === (guest.tag || 'OTHERS'));
+                                const groupLabel = go
+                                  ? getGuestGroupLabel(go.value, isKhmer, go.label)
+                                  : getGuestGroupLabel('GROOM_SIDE', isKhmer, GUEST_GROUP_OPTIONS[0].label);
+                                const tagLabel = to
+                                  ? getGuestTagLabel(to.value, isKhmer, to.label)
+                                  : getGuestTagLabel('OTHERS', isKhmer, GUEST_TAG_OPTIONS.find((o) => o.value === 'OTHERS')?.label || '');
 
                                 return (
                                   <button
@@ -3398,28 +3585,28 @@ function EventDetailPage() {
                     {selectedGiftGuest && (
                       <div className="mt-3 rounded-2xl border border-rose-100 bg-gradient-to-br from-rose-50/70 to-white p-4">
                         <div className="flex items-center justify-between gap-2">
-                          <p className="text-sm font-semibold text-rose-700">ព័ត៌មានភ្ញៀវដែលបានជ្រើសរើស</p>
+                          <p className="text-sm font-semibold text-rose-700">{S.gifts.infoSelected}</p>
                           <span className="inline-flex items-center rounded-full bg-rose-100 px-2 py-0.5 text-[11px] text-rose-700">
-                            បានជ្រើសរើស
+                            {S.gifts.selected}
                           </span>
                         </div>
                         <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
                           <div className="rounded-xl border border-sky-100 bg-sky-50/70 px-3 py-2">
-                            <p className="text-xs text-sky-700">ឈ្មោះ</p>
+                            <p className="text-xs text-sky-700">{S.gifts.colName}</p>
                             <p className="text-sm font-medium text-sky-900">{selectedGiftGuest.name}</p>
                           </div>
                           <div className="rounded-xl border border-amber-100 bg-amber-50/70 px-3 py-2">
-                            <p className="text-xs text-amber-700">លេខទូរស័ព្ទ</p>
+                            <p className="text-xs text-amber-700">{S.gifts.colPhone}</p>
                             <p className="text-sm font-medium text-amber-900">{selectedGiftGuest.phone || '-'}</p>
                           </div>
                           <div className="rounded-xl border border-rose-100 bg-white px-3 py-2">
-                            <p className="text-xs text-gray-500">ក្រុម</p>
+                            <p className="text-xs text-gray-500">{S.gifts.colGroup}</p>
                             <span className="mt-1 inline-flex rounded-full bg-rose-100 px-2 py-0.5 text-xs text-rose-700">
                               {selectedGiftGuestGroup}
                             </span>
                           </div>
                           <div className="rounded-xl border border-gray-200 bg-white px-3 py-2">
-                            <p className="text-xs text-gray-500">ស្លាក</p>
+                            <p className="text-xs text-gray-500">{S.gifts.colTag}</p>
                             <span className="mt-1 inline-flex rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700">
                               {selectedGiftGuestTag}
                             </span>
@@ -3428,7 +3615,7 @@ function EventDetailPage() {
 
                         {selectedGuestGiftRows.length > 0 && (
                           <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2">
-                            <p className="text-sm font-medium text-amber-800">ភ្ញៀវនេះបានចងដៃរួចហើយ</p>
+                            <p className="text-sm font-medium text-amber-800">{S.gifts.alreadyGifted}</p>
                             <div className="mt-1 space-y-1">
                               {selectedGuestGiftRows.map((row) => (
                                 <p key={row.id} className="text-xs text-amber-700">
@@ -3444,90 +3631,88 @@ function EventDetailPage() {
 
                   <div className="min-h-0 overflow-auto rounded-3xl border border-gray-100 bg-white p-4">
                     <div>
-                      <label className="mb-2 block text-sm text-gray-700">ប្រភេទការទូទាត់</label>
+                      <label className="mb-2 block text-sm text-gray-700">{S.gifts.labelPaymentType}</label>
                       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      <button
-                        type="button"
-                        onClick={() => setGiftPaymentType('CASH')}
-                        className={`flex h-16 items-center gap-3 rounded-2xl border-2 px-4 text-left transition-colors ${
-                          giftPaymentType === 'CASH' ? 'border-[#C52133] bg-rose-50/30' : 'border-gray-200 bg-white'
-                        }`}
-                      >
-                        <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
-                          <DollarSign className="h-5 w-5" />
-                        </span>
-                        <span className="text-sm font-medium text-gray-800">Cash</span>
-                      </button>
+                        <button
+                          type="button"
+                          onClick={() => setGiftPaymentType('CASH')}
+                          className={`flex h-16 items-center gap-3 rounded-2xl border-2 px-4 text-left transition-colors ${giftPaymentType === 'CASH' ? 'border-[#C52133] bg-rose-50/30' : 'border-gray-200 bg-white'
+                            }`}
+                        >
+                          <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
+                            <DollarSign className="h-5 w-5" />
+                          </span>
+                          <span className="text-sm font-medium text-gray-800">{S.gifts.payCash}</span>
+                        </button>
 
-                      <button
-                        type="button"
-                        onClick={() => setGiftPaymentType('KHQR')}
-                        className={`flex h-16 items-center gap-3 rounded-2xl border-2 px-4 text-left transition-colors ${
-                          giftPaymentType === 'KHQR' ? 'border-[#C52133] bg-rose-50/30' : 'border-gray-200 bg-white'
-                        }`}
-                      >
-                        <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-sky-50 text-sky-600">
-                          <QrCode className="h-5 w-5" />
-                        </span>
-                        <span className="text-sm font-medium text-gray-800">KHQR</span>
-                      </button>
+                        <button
+                          type="button"
+                          onClick={() => setGiftPaymentType('KHQR')}
+                          className={`flex h-16 items-center gap-3 rounded-2xl border-2 px-4 text-left transition-colors ${giftPaymentType === 'KHQR' ? 'border-[#C52133] bg-rose-50/30' : 'border-gray-200 bg-white'
+                            }`}
+                        >
+                          <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-sky-50 text-sky-600">
+                            <QrCode className="h-5 w-5" />
+                          </span>
+                          <span className="text-sm font-medium text-gray-800">{S.gifts.payKhqr}</span>
+                        </button>
                       </div>
                     </div>
 
-                  <div className="mt-4">
-                    <label className="mb-2 block text-sm text-gray-700">ប្រភេទរូបិយប័ណ្ណ</label>
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      <button
-                        type="button"
-                        onClick={() => setGiftCurrencyType('USD')}
-                        className="flex h-12 items-center gap-3 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-700"
-                      >
-                        <span className={`inline-flex h-5 w-5 items-center justify-center rounded-full border ${giftCurrencyType === 'USD' ? 'border-[#C52133] bg-[#C52133] text-white' : 'border-gray-300 bg-white text-transparent'}`}>
-                          <Check className="h-3.5 w-3.5" />
-                        </span>
-                        ប្រាក់ដុល្លារ ($)
-                      </button>
+                    <div className="mt-4">
+                      <label className="mb-2 block text-sm text-gray-700">{S.gifts.labelCurrencyType}</label>
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <button
+                          type="button"
+                          onClick={() => setGiftCurrencyType('USD')}
+                          className="flex h-12 items-center gap-3 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-700"
+                        >
+                          <span className={`inline-flex h-5 w-5 items-center justify-center rounded-full border ${giftCurrencyType === 'USD' ? 'border-[#C52133] bg-[#C52133] text-white' : 'border-gray-300 bg-white text-transparent'}`}>
+                            <Check className="h-3.5 w-3.5" />
+                          </span>
+                          {S.gifts.currencyUsd}
+                        </button>
 
-                      <button
-                        type="button"
-                        onClick={() => setGiftCurrencyType('KHR')}
-                        className="flex h-12 items-center gap-3 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-700"
-                      >
-                        <span className={`inline-flex h-5 w-5 items-center justify-center rounded-full border ${giftCurrencyType === 'KHR' ? 'border-[#C52133] bg-[#C52133] text-white' : 'border-gray-300 bg-white text-transparent'}`}>
-                          <Check className="h-3.5 w-3.5" />
-                        </span>
-                        ប្រាក់រៀល (៛)
-                      </button>
+                        <button
+                          type="button"
+                          onClick={() => setGiftCurrencyType('KHR')}
+                          className="flex h-12 items-center gap-3 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-700"
+                        >
+                          <span className={`inline-flex h-5 w-5 items-center justify-center rounded-full border ${giftCurrencyType === 'KHR' ? 'border-[#C52133] bg-[#C52133] text-white' : 'border-gray-300 bg-white text-transparent'}`}>
+                            <Check className="h-3.5 w-3.5" />
+                          </span>
+                          {S.gifts.currencyKhr}
+                        </button>
+                      </div>
                     </div>
-                  </div>
 
-                  <div className="mt-4">
-                    <label className="mb-2 block text-sm text-gray-700">ចំនួនទឹកប្រាក់</label>
-                    <div className="flex h-14 sm:h-16 items-center rounded-2xl border border-gray-200 bg-white px-3 sm:px-4">
-                      <span className="mr-2 sm:mr-3 text-2xl sm:text-3xl font-semibold text-blue-500">{giftCurrencyType === 'USD' ? '$' : '៛'}</span>
-                      <input
-                        value={giftAmount}
-                        onChange={(e) => handleGiftAmountChange(e.target.value)}
-                        onKeyDown={handleGiftAmountKeyDown}
-                        onPaste={handleGiftAmountPaste}
-                        className="w-full border-0 bg-transparent text-2xl sm:text-4xl font-semibold text-gray-900 outline-none"
-                        inputMode="decimal"
-                        pattern="[0-9.]*"
+                    <div className="mt-4">
+                      <label className="mb-2 block text-sm text-gray-700">{S.gifts.thAmount}</label>
+                      <div className="flex h-14 sm:h-16 items-center rounded-2xl border border-gray-200 bg-white px-3 sm:px-4">
+                        <span className="mr-2 sm:mr-3 text-2xl sm:text-3xl font-semibold text-blue-500">{giftCurrencyType === 'USD' ? '$' : '៛'}</span>
+                        <input
+                          value={giftAmount}
+                          onChange={(e) => handleGiftAmountChange(e.target.value)}
+                          onKeyDown={handleGiftAmountKeyDown}
+                          onPaste={handleGiftAmountPaste}
+                          className="w-full border-0 bg-transparent text-2xl sm:text-4xl font-semibold text-gray-900 outline-none"
+                          inputMode="decimal"
+                          pattern="[0-9.]*"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="mt-4">
+                      <label className="mb-2 block text-sm text-gray-700">{S.gifts.thNote}</label>
+                      <Input
+                        value={giftNote}
+                        onChange={(e) => setGiftNote(e.target.value)}
+                        placeholder={S.guests.notePh}
+                        className="h-10 sm:h-11"
                       />
                     </div>
                   </div>
-
-                  <div className="mt-4">
-                    <label className="mb-2 block text-sm text-gray-700">កំណត់ចំណាំ</label>
-                    <Input
-                      value={giftNote}
-                      onChange={(e) => setGiftNote(e.target.value)}
-                      placeholder="បញ្ចូលកំណត់ចំណាំ"
-                      className="h-10 sm:h-11"
-                    />
-                  </div>
                 </div>
-              </div>
 
                 <div className="mt-6 flex items-center justify-end gap-2">
                   <button
@@ -3536,7 +3721,7 @@ function EventDetailPage() {
                     className="inline-flex h-10 items-center justify-center gap-2 rounded-full bg-gray-100 px-5 text-sm text-gray-700 hover:bg-gray-200"
                   >
                     <X className="h-4 w-4" />
-                    បោះបង់
+                    {S.guests.cancel}
                   </button>
                   <button
                     type="button"
@@ -3545,7 +3730,7 @@ function EventDetailPage() {
                     className="inline-flex h-10 items-center justify-center gap-2 rounded-full bg-[#C52133] px-5 text-sm text-white hover:bg-[#aa1b2a] disabled:cursor-not-allowed disabled:bg-gray-300 disabled:hover:bg-gray-300"
                   >
                     <Check className="h-4 w-4" />
-                    {editingGiftRowId ? 'រក្សាទុក' : 'បង្កើតថ្មី'}
+                    {editingGiftRowId ? S.guests.save : S.guests.create}
                   </button>
                 </div>
               </motion.div>
@@ -3557,403 +3742,362 @@ function EventDetailPage() {
   };
 
   const renderEditTab = () => (
-    <section className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
-      <p className="mb-3 text-sm text-gray-500">កែប្រែព័ត៌មានព្រឹត្តិការណ៍</p>
+    <section className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+      <p className="mb-3 text-sm text-gray-500 dark:text-slate-400">{S.edit.lead}</p>
       <form onSubmit={handleSaveEvent} className="grid grid-cols-1 gap-5 md:grid-cols-2">
         {(() => {
-          const editLabelClassName = 'mb-2 block text-sm font-medium text-gray-700 font-khmer-body';
+          const editLabelClassName = 'mb-2 block text-sm font-medium text-gray-700 font-khmer-body dark:text-slate-300';
           const editInputClassName =
-            'h-11 rounded-xl border-gray-300 bg-white/90 shadow-sm transition focus-visible:border-red-500 focus-visible:ring-2 focus-visible:ring-red-100';
+            'h-11 rounded-xl border-gray-300 bg-white/90 text-gray-900 shadow-sm transition focus-visible:border-red-500 focus-visible:ring-2 focus-visible:ring-red-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:focus-visible:ring-slate-700';
           const editSelectClassName =
-            'h-11 w-full rounded-xl border border-gray-300 bg-white px-3 text-sm shadow-sm outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-100';
+            'h-11 w-full rounded-xl border border-gray-300 bg-white px-3 text-sm text-gray-900 shadow-sm outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:focus:ring-slate-700';
 
           return (
             <>
-        {editEventType === 'WEDDING' && (
-          <>
-            <div>
-              <label className={editLabelClassName}>ឈ្មោះកូនកំលោះ<RequiredStar /></label>
-              <Input
-                value={editGroomName}
-                onChange={(e) => setEditGroomName(e.target.value)}
-                disabled={isSavingEvent}
-                className={editInputClassName}
-              />
-            </div>
-            <div>
-              <label className={editLabelClassName}>ឈ្មោះកូនក្រមុំ<RequiredStar /></label>
-              <Input
-                value={editBrideName}
-                onChange={(e) => setEditBrideName(e.target.value)}
-                disabled={isSavingEvent}
-                className={editInputClassName}
-              />
-            </div>
-          </>
-        )}
+              {editEventType === 'WEDDING' && (
+                <>
+                  <div>
+                    <label className={editLabelClassName}>{S.edit.groom}<RequiredStar /></label>
+                    <Input
+                      value={editGroomName}
+                      onChange={(e) => setEditGroomName(e.target.value)}
+                      disabled={isSavingEvent}
+                      className={editInputClassName}
+                    />
+                  </div>
+                  <div>
+                    <label className={editLabelClassName}>{S.edit.bride}<RequiredStar /></label>
+                    <Input
+                      value={editBrideName}
+                      onChange={(e) => setEditBrideName(e.target.value)}
+                      disabled={isSavingEvent}
+                      className={editInputClassName}
+                    />
+                  </div>
+                </>
+              )}
 
-        <div>
-          <label className={editLabelClassName}>Event Type Catalog<RequiredStar /></label>
-          <select
-            value={selectedEventTypeId}
-            onChange={(e) => setSelectedEventTypeId(e.target.value)}
-            className={`${editSelectClassName} disabled:cursor-not-allowed disabled:border-gray-200 disabled:bg-gray-100 disabled:text-gray-400`}
-            disabled
-          >
-            {eventTypes.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.name}
-              </option>
-            ))}
-          </select>
-        </div>
+              <div>
+                <label className={editLabelClassName}>{S.edit.eventTypeCatalog}<RequiredStar /></label>
+                <select
+                  value={selectedEventTypeId}
+                  onChange={(e) => setSelectedEventTypeId(e.target.value)}
+                  className={`${editSelectClassName} disabled:cursor-not-allowed disabled:border-gray-200 disabled:bg-gray-100 disabled:text-gray-400 dark:disabled:border-slate-700 dark:disabled:bg-slate-800/70 dark:disabled:text-slate-500`}
+                  disabled
+                >
+                  {eventTypes.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-        <div>
-          <label className={editLabelClassName}>Template</label>
-          <select
-            value={selectedTemplateId}
-            onChange={(e) => setSelectedTemplateId(e.target.value)}
-            className={editSelectClassName}
-            disabled={isSavingEvent || templates.length === 0}
-          >
-            {templates.length === 0 ? (
-              <option value="">No template available</option>
-            ) : (
-              templates.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name}
-                </option>
-              ))
-            )}
-          </select>
-        </div>
+              {editEventType === 'WEDDING' && (
+                <div>
+                  <label className={editLabelClassName}>កម្មវិធីប្រភេទ</label>
+                  <select
+                    value={editWeddingProgramType}
+                    onChange={(e) => setEditWeddingProgramType(e.target.value as WeddingProgramType)}
+                    disabled={isSavingEvent}
+                    className={editSelectClassName}
+                  >
+                    {WEDDING_PROGRAM_TYPE_OPTIONS.map((item) => (
+                      <option key={item.value} value={item.value}>
+                        {isKhmer ? item.km : item.en}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
-        {editEventType === 'CEREMONY' && (
-          <>
-            <div>
-              <label className={editLabelClassName}>Ceremony Name<RequiredStar /></label>
-              <Input
-                placeholder="Ceremony Name"
-                value={editCeremonyName}
-                onChange={(e) => setEditCeremonyName(e.target.value)}
-                disabled={isSavingEvent}
-                className={editInputClassName}
-              />
-            </div>
-            <div>
-              <label className={editLabelClassName}>Wat Name<RequiredStar /></label>
-              <Input
-                placeholder="Wat Name"
-                value={editWatName}
-                onChange={(e) => setEditWatName(e.target.value)}
-                disabled={isSavingEvent}
-                className={editInputClassName}
-              />
-            </div>
-            <div className="md:col-span-2">
-              <label className={editLabelClassName}>Main Celebrant<RequiredStar /></label>
-              <Input
-                placeholder="Main Celebrant"
-                value={editMainCelebrant}
-                onChange={(e) => setEditMainCelebrant(e.target.value)}
-                disabled={isSavingEvent}
-                className={editInputClassName}
-              />
-            </div>
-          </>
-        )}
+              {editEventType === 'CEREMONY' && (
+                <>
+                  <div>
+                    <label className={editLabelClassName}>Ceremony Name<RequiredStar /></label>
+                    <Input
+                      placeholder="Ceremony Name"
+                      value={editCeremonyName}
+                      onChange={(e) => setEditCeremonyName(e.target.value)}
+                      disabled={isSavingEvent}
+                      className={editInputClassName}
+                    />
+                  </div>
+                  <div>
+                    <label className={editLabelClassName}>Wat Name<RequiredStar /></label>
+                    <Input
+                      placeholder="Wat Name"
+                      value={editWatName}
+                      onChange={(e) => setEditWatName(e.target.value)}
+                      disabled={isSavingEvent}
+                      className={editInputClassName}
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className={editLabelClassName}>Main Celebrant<RequiredStar /></label>
+                    <Input
+                      placeholder="Main Celebrant"
+                      value={editMainCelebrant}
+                      onChange={(e) => setEditMainCelebrant(e.target.value)}
+                      disabled={isSavingEvent}
+                      className={editInputClassName}
+                    />
+                  </div>
+                </>
+              )}
 
-        {editEventType === 'FUNERAL' && (
-          <>
-            <div>
-              <label className={editLabelClassName}>Deceased Name<RequiredStar /></label>
-              <Input
-                placeholder="Deceased Name"
-                value={editDeceasedName}
-                onChange={(e) => setEditDeceasedName(e.target.value)}
-                disabled={isSavingEvent}
-                className={editInputClassName}
-              />
-            </div>
-            <div>
-              <label className={editLabelClassName}>Age<RequiredStar /></label>
-              <Input
-                placeholder="Age"
-                value={editDeceasedAge}
-                onChange={(e) => setEditDeceasedAge(e.target.value)}
-                disabled={isSavingEvent}
-                className={editInputClassName}
-              />
-            </div>
-            <div className="md:col-span-2">
-              <label className={editLabelClassName}>Religious Rites<RequiredStar /></label>
-              <Input
-                placeholder="Religious Rites"
-                value={editReligiousRites}
-                onChange={(e) => setEditReligiousRites(e.target.value)}
-                disabled={isSavingEvent}
-                className={editInputClassName}
-              />
-            </div>
-          </>
-        )}
+              {editEventType === 'FUNERAL' && (
+                <>
+                  <div>
+                    <label className={editLabelClassName}>Deceased Name<RequiredStar /></label>
+                    <Input
+                      placeholder="Deceased Name"
+                      value={editDeceasedName}
+                      onChange={(e) => setEditDeceasedName(e.target.value)}
+                      disabled={isSavingEvent}
+                      className={editInputClassName}
+                    />
+                  </div>
+                  <div>
+                    <label className={editLabelClassName}>Age<RequiredStar /></label>
+                    <Input
+                      placeholder="Age"
+                      value={editDeceasedAge}
+                      onChange={(e) => setEditDeceasedAge(e.target.value)}
+                      disabled={isSavingEvent}
+                      className={editInputClassName}
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className={editLabelClassName}>Religious Rites<RequiredStar /></label>
+                    <Input
+                      placeholder="Religious Rites"
+                      value={editReligiousRites}
+                      onChange={(e) => setEditReligiousRites(e.target.value)}
+                      disabled={isSavingEvent}
+                      className={editInputClassName}
+                    />
+                  </div>
+                </>
+              )}
 
-        {(editEventType === 'HOUSEWARMING' || editEventType === 'BIRTHDAY') && (
-          <>
-            <div>
-              <label className={editLabelClassName}>Host Name<RequiredStar /></label>
-              <div className="relative">
-              <Home className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
-              <Input
-                placeholder="Host Name"
-                value={editHostName}
-                onChange={(e) => setEditHostName(e.target.value)}
-                disabled={isSavingEvent}
-                className={`${editInputClassName} pl-10`}
-              />
-            </div>
-            </div>
-            <div>
-              <label className={editLabelClassName}>Event Title<RequiredStar /></label>
-              <div className="relative">
-              <PartyPopper className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
-              <Input
-                placeholder="Event Title"
-                value={editEventTitle}
-                onChange={(e) => setEditEventTitle(e.target.value)}
-                disabled={isSavingEvent}
-                className={`${editInputClassName} pl-10`}
-              />
-            </div>
-            </div>
-          </>
-        )}
-
-        <div>
-          <label className={editLabelClassName}>ថ្ងៃចាប់ផ្តើម<RequiredStar /></label>
-          <Input
-            type="datetime-local"
-            value={editDate}
-            onChange={(e) => setEditDate(e.target.value)}
-            required
-            disabled={isSavingEvent}
-            className={editInputClassName}
-          />
-        </div>
-
-        <div>
-          <label className={editLabelClassName}>ថ្ងៃបញ្ចប់កម្មវិធី</label>
-          <Input
-            type="datetime-local"
-            value={editEndDate}
-            onChange={(e) => setEditEndDate(e.target.value)}
-            disabled={isSavingEvent}
-            className={editInputClassName}
-          />
-        </div>
-
-        <div>
-          <label className={editLabelClassName}>Slug</label>
-          <Input
-            value={editSlug}
-            onChange={(e) => setEditSlug(e.target.value)}
-            placeholder="wedding-20260324190956-1731"
-            disabled={isSavingEvent}
-            className={editInputClassName}
-          />
-        </div>
-
-        <div>
-          <label className={editLabelClassName}>ប្រភេទកម្មវិធី<RequiredStar /></label>
-          <div className="relative">
-            <ListChecks className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
-            <select
-              value={editCategoryKey}
-              onChange={(e) => handleEditCategoryChange(e.target.value)}
-              className={`${editSelectClassName} pl-10`}
-              disabled={isSavingEvent}
-            >
-              {EVENT_CATEGORY_OPTIONS.map((option) => (
-                <option key={option.key} value={option.key}>
-                  {option.subtitle}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        <div>
-          <label className={editLabelClassName}>ប្រភេទ<RequiredStar /></label>
-          <div className="relative">
-            <ListChecks className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
-            <select
-              value={editEventType}
-              onChange={(e) => handleEditEventTypeChange(e.target.value as EditEventType)}
-              className={`${editSelectClassName} pl-10 disabled:cursor-not-allowed disabled:border-gray-200 disabled:bg-gray-100 disabled:text-gray-400`}
-              disabled
-            >
-              {EDIT_EVENT_TYPE_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        <div>
-          <label className={editLabelClassName}>អាសយដ្ឋាន<RequiredStar /></label>
-          <div className="relative">
-            <MapPin className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
-            <Input
-              value={editAddress}
-              onChange={(e) => setEditAddress(e.target.value)}
-              required
-              disabled={isSavingEvent}
-              className={`${editInputClassName} pl-10`}
-            />
-          </div>
-        </div>
-
-        <div className="md:col-span-2">
-          <label className={editLabelClassName}>Google Map</label>
-          <div className="relative">
-            <Globe className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
-            <Input
-              type="url"
-              value={editGoogleMapLink}
-              onChange={(e) => setEditGoogleMapLink(e.target.value)}
-              disabled={isSavingEvent}
-              className={`${editInputClassName} pl-10`}
-            />
-          </div>
-        </div>
-
-        <div className="md:col-span-2 rounded-lg border border-gray-200 p-4">
-          <p className="mb-3 text-sm font-medium text-gray-700">អ្នកណាអាចចូលមើលបាន?</p>
-          <div className="space-y-2 text-sm text-gray-700">
-            <label className="flex items-center gap-2">
-              <input
-                type="radio"
-                name="visibility"
-                value="PUBLIC"
-                checked={visibility === 'PUBLIC'}
-                onChange={() => setVisibility('PUBLIC')}
-                disabled={isSavingEvent}
-              />
-              គ្រប់គ្នា
-            </label>
-            <label className="flex items-center gap-2">
-              <input
-                type="radio"
-                name="visibility"
-                value="PRIVATE"
-                checked={visibility === 'PRIVATE'}
-                onChange={() => setVisibility('PRIVATE')}
-                disabled={isSavingEvent}
-              />
-              សម្រាប់តែខ្ញុំ
-            </label>
-          </div>
-        </div>
-
-        <div className="md:col-span-2 rounded-lg border border-gray-200 p-4">
-          <label className="flex items-center gap-2 text-sm text-gray-700">
-            <input
-              type="checkbox"
-              checked={preventDuplicateGuestNames}
-              onChange={(e) => setPreventDuplicateGuestNames(e.target.checked)}
-              disabled={isSavingEvent}
-            />
-            មិនអនុញ្ញាតឱ្យមានភ្ញៀវឈ្មោះដូចគ្នា
-          </label>
-        </div>
-
-        <div className="md:col-span-2 grid grid-cols-1 gap-4 md:grid-cols-3">
-          {[
-            { key: 'backgroundImage', label: 'រូបភាព Cover', isKhqr: false },
-            { key: 'khqrDollar', label: 'KHQR ប្រាក់ដុល្លារ', isKhqr: true },
-            { key: 'khqrRiel', label: 'KHQR ប្រាក់រៀល', isKhqr: true },
-          ].map((section) => (
-            <div key={section.key}>
-              <p className="mb-2 text-sm font-medium text-gray-700 font-khmer-body">{section.label}</p>
-              <label
-                htmlFor={`edit-${section.key}`}
-                className={`flex h-40 cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed px-3 text-center text-sm transition-all ${
-                  filePreviews[section.key] || getStoredImageInfo(section.key as 'backgroundImage' | 'khqrDollar' | 'khqrRiel')
-                    ? 'border-emerald-400 bg-emerald-50 ring-2 ring-emerald-100 shadow-sm'
-                    : section.isKhqr
-                      ? 'border-rose-300 bg-rose-50/70 text-rose-700 hover:border-rose-400'
-                      : 'border-gray-300 bg-gray-50 text-gray-500 hover:border-red-300'
-                }`}
-              >
-                {(() => {
-                  const selectedPreviewUrl = filePreviews[section.key];
-                  const storedInfo = getStoredImageInfo(
-                    section.key as 'backgroundImage' | 'khqrDollar' | 'khqrRiel',
-                  );
-
-                  const previewUrl = selectedPreviewUrl || storedInfo?.url;
-                  const previewName =
-                    fileNames[section.key] ||
-                    (selectedPreviewUrl
-                      ? fileNames[section.key]
-                      : storedInfo?.name);
-
-                  if (!previewUrl) {
-                    return (
-                      <>
-                        <Upload className="mb-2 h-5 w-5" />
-                        <p>Click to upload or drag and drop</p>
-                        <p className="mt-1 text-xs text-gray-500">PNG, JPG, GIF up to 50MB</p>
-                      </>
-                    );
-                  }
-
-                  return (
-                    <>
-                      <img
-                        src={previewUrl}
-                        alt={section.label}
-                        className="mb-2 h-18 w-full rounded-md object-cover"
+              {(editEventType === 'HOUSEWARMING' || editEventType === 'BIRTHDAY') && (
+                <>
+                  <div>
+                    <label className={editLabelClassName}>Host Name<RequiredStar /></label>
+                    <div className="relative">
+                      <Home className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500 dark:text-slate-400" />
+                      <Input
+                        placeholder="Host Name"
+                        value={editHostName}
+                        onChange={(e) => setEditHostName(e.target.value)}
+                        disabled={isSavingEvent}
+                        className={`${editInputClassName} pl-10`}
                       />
-                      {selectedPreviewUrl && (
-                        <p className="mb-1 inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
-                          <CheckCircle2 className="h-3.5 w-3.5" />
-                          Success
-                        </p>
-                      )}
-                      <p className="line-clamp-2 break-all text-xs text-gray-600">{previewName}</p>
-                    </>
-                  );
-                })()}
-                <input
-                  id={`edit-${section.key}`}
-                  name={section.key}
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(event) => handleFileChange(section.key, event.target.files?.[0] || null)}
-                />
-              </label>
-            </div>
-          ))}
-        </div>
+                    </div>
+                  </div>
+                  <div>
+                    <label className={editLabelClassName}>Event Title<RequiredStar /></label>
+                    <div className="relative">
+                      <PartyPopper className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500 dark:text-slate-400" />
+                      <Input
+                        placeholder="Event Title"
+                        value={editEventTitle}
+                        onChange={(e) => setEditEventTitle(e.target.value)}
+                        disabled={isSavingEvent}
+                        className={`${editInputClassName} pl-10`}
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
 
-        <div className="md:col-span-2 flex flex-wrap items-center gap-3">
-          <Button
-            type="button"
-            variant="outline"
-            disabled={isSavingEvent || isDeletingEvent}
-            onClick={handleDeleteEvent}
-            className="border-red-300 text-red-600 hover:bg-red-50"
-          >
-            {isDeletingEvent ? 'កំពុងលុប...' : 'លុបព្រឹត្តិការណ៍'}
-          </Button>
-          <Button type="submit" disabled={isSavingEvent || isDeletingEvent} className="bg-red-600 hover:bg-red-700">
-            {isSavingEvent ? 'កំពុងរក្សាទុក...' : 'កែប្រែ'}
-          </Button>
-        </div>
+              <div>
+                <label className={editLabelClassName}>{S.edit.startDate}<RequiredStar /></label>
+                <Input
+                  type="datetime-local"
+                  value={editDate}
+                  onChange={(e) => setEditDate(e.target.value)}
+                  required
+                  disabled={isSavingEvent}
+                  className={editInputClassName}
+                />
+              </div>
+
+              <div>
+                <label className={editLabelClassName}>{S.edit.endDate}</label>
+                <Input
+                  type="datetime-local"
+                  value={editEndDate}
+                  onChange={(e) => setEditEndDate(e.target.value)}
+                  disabled={isSavingEvent}
+                  className={editInputClassName}
+                />
+              </div>
+
+              <div>
+                <label className={editLabelClassName}>Slug</label>
+                <Input
+                  value={editSlug}
+                  onChange={(e) => setEditSlug(e.target.value)}
+                  placeholder="wedding-20260324190956-1731"
+                  disabled={isSavingEvent}
+                  className={editInputClassName}
+                />
+              </div>
+
+              <div>
+                <label className={editLabelClassName}>{S.edit.address}<RequiredStar /></label>
+                <div className="relative">
+                  <MapPin className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500 dark:text-slate-400" />
+                  <Input
+                    value={editAddress}
+                    onChange={(e) => setEditAddress(e.target.value)}
+                    required
+                    disabled={isSavingEvent}
+                    className={`${editInputClassName} pl-10`}
+                  />
+                </div>
+              </div>
+
+              <div className="md:col-span-2">
+                <label className={editLabelClassName}>Google Map</label>
+                <div className="relative">
+                  <Globe className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500 dark:text-slate-400" />
+                  <Input
+                    type="url"
+                    value={editGoogleMapLink}
+                    onChange={(e) => setEditGoogleMapLink(e.target.value)}
+                    disabled={isSavingEvent}
+                    className={`${editInputClassName} pl-10`}
+                  />
+                </div>
+              </div>
+
+              <div className="md:col-span-2 rounded-lg border border-gray-200 p-4 dark:border-slate-700 dark:bg-slate-900/40">
+                <p className="mb-3 text-sm font-medium text-gray-700 dark:text-slate-200">{S.edit.visibilityTitle}</p>
+                <div className="space-y-2 text-sm text-gray-700 dark:text-slate-300">
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="visibility"
+                      value="PUBLIC"
+                      checked={visibility === 'PUBLIC'}
+                      onChange={() => setVisibility('PUBLIC')}
+                      disabled={isSavingEvent}
+                    />
+                    {S.edit.everyone}
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="visibility"
+                      value="PRIVATE"
+                      checked={visibility === 'PRIVATE'}
+                      onChange={() => setVisibility('PRIVATE')}
+                      disabled={isSavingEvent}
+                    />
+                    {S.edit.onlyMe}
+                  </label>
+                </div>
+              </div>
+
+              <div className="md:col-span-2 rounded-lg border border-gray-200 p-4 dark:border-slate-700 dark:bg-slate-900/40">
+                <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={preventDuplicateGuestNames}
+                    onChange={(e) => setPreventDuplicateGuestNames(e.target.checked)}
+                    disabled={isSavingEvent}
+                  />
+                  {S.edit.dupGuests}
+                </label>
+              </div>
+
+              <div className="md:col-span-2 grid grid-cols-1 gap-4 md:grid-cols-3">
+                {[
+                  { key: 'backgroundImage', label: S.edit.coverImage, isKhqr: false },
+                  { key: 'khqrDollar', label: S.edit.khqrUsd, isKhqr: true },
+                  { key: 'khqrRiel', label: S.edit.khqrKhr, isKhqr: true },
+                ].map((section) => (
+                  <div key={section.key}>
+                    <p className="mb-2 text-sm font-medium text-gray-700 font-khmer-body dark:text-slate-300">{section.label}</p>
+                    <label
+                      htmlFor={`edit-${section.key}`}
+                      className={`flex h-40 cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed px-3 text-center text-sm transition-all ${filePreviews[section.key] || getStoredImageInfo(section.key as 'backgroundImage' | 'khqrDollar' | 'khqrRiel')
+                          ? 'border-emerald-400 bg-emerald-50 ring-2 ring-emerald-100 shadow-sm dark:bg-emerald-900/30 dark:ring-emerald-800/70'
+                        : section.isKhqr
+                          ? 'border-rose-300 bg-rose-50/70 text-rose-700 hover:border-rose-400 dark:border-rose-700 dark:bg-rose-900/20 dark:text-rose-300 dark:hover:border-rose-500'
+                          : 'border-gray-300 bg-gray-50 text-gray-500 hover:border-red-300 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:border-rose-500'
+                        }`}
+                    >
+                      {(() => {
+                        const selectedPreviewUrl = filePreviews[section.key];
+                        const storedInfo = getStoredImageInfo(
+                          section.key as 'backgroundImage' | 'khqrDollar' | 'khqrRiel',
+                        );
+
+                        const previewUrl = selectedPreviewUrl || storedInfo?.url;
+                        const previewName =
+                          fileNames[section.key] ||
+                          (selectedPreviewUrl
+                            ? fileNames[section.key]
+                            : storedInfo?.name);
+
+                        if (!previewUrl) {
+                          return (
+                            <>
+                              <Upload className="mb-2 h-5 w-5" />
+                              <p>{S.edit.uploadHint}</p>
+                              <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">{S.edit.uploadFormats}</p>
+                            </>
+                          );
+                        }
+
+                        return (
+                          <>
+                            <img
+                              src={previewUrl}
+                              alt={section.label}
+                              className="mb-2 h-18 w-full rounded-md object-cover"
+                            />
+                            {selectedPreviewUrl && (
+                              <p className="mb-1 inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
+                                <CheckCircle2 className="h-3.5 w-3.5" />
+                                {S.edit.success}
+                              </p>
+                            )}
+                            <p className="line-clamp-2 break-all text-xs text-gray-600 dark:text-slate-300">{previewName}</p>
+                          </>
+                        );
+                      })()}
+                      <input
+                        id={`edit-${section.key}`}
+                        name={section.key}
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(event) => handleFileChange(section.key, event.target.files?.[0] || null)}
+                      />
+                    </label>
+                  </div>
+                ))}
+              </div>
+
+              <div className="md:col-span-2 flex flex-wrap items-center gap-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={isSavingEvent || isDeletingEvent}
+                  onClick={handleDeleteEvent}
+                  className="border-red-300 text-red-600 hover:bg-red-50 dark:border-rose-700 dark:text-rose-300 dark:hover:bg-rose-900/20"
+                >
+                  {isDeletingEvent ? S.edit.deleting : S.edit.deleteEvent}
+                </Button>
+                <Button type="submit" disabled={isSavingEvent || isDeletingEvent} className="bg-red-600 hover:bg-red-700">
+                  {isSavingEvent ? S.edit.saving : S.edit.save}
+                </Button>
+              </div>
             </>
           );
         })()}
@@ -3962,16 +4106,16 @@ function EventDetailPage() {
   );
 
   const renderScheduleTab = () => (
-    <section className="space-y-6 rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+    <section className="space-y-6 rounded-2xl border border-gray-100 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-900">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-rose-50 text-[#C52133]">
             <CalendarDays className="h-6 w-6" />
           </div>
           <div>
-            <h2 className="font-moul text-2xl text-gray-900">របៀបវារៈកម្មវិធី</h2>
-            <span className="mt-1 inline-flex items-center rounded-full bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700">
-              {agendaSections.length} របៀបវារៈ
+            <h2 className="font-moul text-2xl text-gray-900 dark:text-slate-100">{S.schedule.title}</h2>
+            <span className="mt-1 inline-flex items-center rounded-full bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700 dark:bg-sky-900/30 dark:text-sky-300">
+              {agendaSections.length} {S.schedule.agendaCountSuffix}
             </span>
           </div>
         </div>
@@ -3979,7 +4123,7 @@ function EventDetailPage() {
         <button
           type="button"
           onClick={() => setIsAgendaCollapsed((prev) => !prev)}
-          className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+          className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
         >
           {isAgendaCollapsed ? <ChevronDown className="h-5 w-5" /> : <ChevronUp className="h-5 w-5" />}
         </button>
@@ -3988,20 +4132,20 @@ function EventDetailPage() {
       {!isAgendaCollapsed && (
         <div className="space-y-6 font-khmer-body">
           {agendaSections.map((section, sectionIndex) => (
-            <div key={section.id} className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
+            <div key={section.id} className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
               <div className="mb-4 space-y-2">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <label className="text-sm font-medium text-gray-700">
-                    ឈ្មោះរបៀបវារៈ
+                  <label className="text-sm font-medium text-gray-700 dark:text-slate-300">
+                    {S.schedule.sectionName}
                     <span className="ml-1 text-[#C52133]">*</span>
                   </label>
                   <button
                     type="button"
                     onClick={() => removeAgendaSection(section.id)}
-                    className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-semibold text-[#C52133] hover:bg-rose-100"
+                    className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-semibold text-[#C52133] hover:bg-rose-100 dark:border-rose-700 dark:bg-rose-900/25 dark:text-rose-300 dark:hover:bg-rose-900/40"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
-                    លុបរបៀបវារៈ
+                    {S.schedule.deleteSection}
                   </button>
                 </div>
                 <Input
@@ -4012,29 +4156,29 @@ function EventDetailPage() {
                       prev.map((item) => (item.id === section.id ? { ...item, title: value } : item)),
                     );
                   }}
-                  placeholder="ឧ. កម្មវិធីថ្ងៃទី ១..."
-                  className="h-11 rounded-xl bg-gray-50"
+                  placeholder={S.schedule.sectionPlaceholder}
+                  className="h-11 rounded-xl bg-gray-50 dark:bg-slate-800 dark:text-slate-100"
                 />
               </div>
 
               <div className="relative pl-6">
-                <div className="absolute left-2 top-2 h-[calc(100%-16px)] border-l-2 border-dashed border-gray-200" />
+                <div className="absolute left-2 top-2 h-[calc(100%-16px)] border-l-2 border-dashed border-gray-200 dark:border-slate-700" />
 
                 <div className="space-y-3">
                   {section.items.map((item) => (
-                    <div key={item.id} className="relative rounded-2xl bg-gray-50 p-4">
-                      <span className="absolute -left-6 top-5 h-3 w-3 rounded-full border-2 border-white bg-[#C52133]" />
+                    <div key={item.id} className="relative rounded-2xl bg-gray-50 p-4 dark:bg-slate-800">
+                      <span className="absolute -left-6 top-5 h-3 w-3 rounded-full border-2 border-white bg-[#C52133] dark:border-slate-900" />
                       <button
                         type="button"
                         onClick={() => removeAgendaItem(section.id, item.id)}
-                        className="absolute right-3 top-3 inline-flex h-7 w-7 items-center justify-center rounded-full border border-rose-200 bg-rose-50 text-[#C52133] hover:bg-rose-100"
-                        title="លុបកម្មវិធី"
+                        className="absolute right-3 top-3 inline-flex h-7 w-7 items-center justify-center rounded-full border border-rose-200 bg-rose-50 text-[#C52133] hover:bg-rose-100 dark:border-rose-700 dark:bg-rose-900/25 dark:text-rose-300 dark:hover:bg-rose-900/40"
+                        title={S.schedule.deleteItemTitle}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
                       <div className="grid gap-3 md:grid-cols-[1.2fr_0.6fr_0.6fr]">
                         <div className="space-y-2">
-                          <label className="text-xs font-medium text-gray-600">ឈ្មោះកម្មវិធី</label>
+                          <label className="text-xs font-medium text-gray-600 dark:text-slate-400">{S.schedule.itemTitle}</label>
                           <Input
                             value={item.title}
                             onChange={(event) => {
@@ -4043,24 +4187,24 @@ function EventDetailPage() {
                                 prev.map((agenda) =>
                                   agenda.id === section.id
                                     ? {
-                                        ...agenda,
-                                        items: agenda.items.map((agendaItem) =>
-                                          agendaItem.id === item.id ? { ...agendaItem, title: value } : agendaItem,
-                                        ),
-                                      }
+                                      ...agenda,
+                                      items: agenda.items.map((agendaItem) =>
+                                        agendaItem.id === item.id ? { ...agendaItem, title: value } : agendaItem,
+                                      ),
+                                    }
                                     : agenda,
                                 ),
                               );
                             }}
-                            placeholder="ឈ្មោះកម្មវិធី"
-                            className="h-10 rounded-xl bg-white"
+                            placeholder={S.schedule.itemTitlePh}
+                            className="h-10 rounded-xl bg-white dark:bg-slate-900 dark:text-slate-100"
                           />
                         </div>
 
                         <div className="space-y-2">
-                          <label className="text-xs font-medium text-gray-600">កាលបរិច្ឆេទ</label>
+                          <label className="text-xs font-medium text-gray-600 dark:text-slate-400">{S.schedule.date}</label>
                           <div className="relative">
-                            <CalendarDays className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                            <CalendarDays className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-slate-500" />
                             <Input
                               type="date"
                               value={item.date ?? ''}
@@ -4070,24 +4214,24 @@ function EventDetailPage() {
                                   prev.map((agenda) =>
                                     agenda.id === section.id
                                       ? {
-                                          ...agenda,
-                                          items: agenda.items.map((agendaItem) =>
-                                            agendaItem.id === item.id ? { ...agendaItem, date: value } : agendaItem,
-                                          ),
-                                        }
+                                        ...agenda,
+                                        items: agenda.items.map((agendaItem) =>
+                                          agendaItem.id === item.id ? { ...agendaItem, date: value } : agendaItem,
+                                        ),
+                                      }
                                       : agenda,
                                   ),
                                 );
                               }}
-                              className="h-10 rounded-xl bg-white pl-9"
+                              className="h-10 rounded-xl bg-white pl-9 dark:bg-slate-900 dark:text-slate-100"
                             />
                           </div>
                         </div>
 
                         <div className="space-y-2">
-                          <label className="text-xs font-medium text-gray-600">ម៉ោង</label>
+                          <label className="text-xs font-medium text-gray-600 dark:text-slate-400">{S.schedule.time}</label>
                           <div className="relative">
-                            <Clock3 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                            <Clock3 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-slate-500" />
                             <Input
                               type="time"
                               value={item.time}
@@ -4097,16 +4241,16 @@ function EventDetailPage() {
                                   prev.map((agenda) =>
                                     agenda.id === section.id
                                       ? {
-                                          ...agenda,
-                                          items: agenda.items.map((agendaItem) =>
-                                            agendaItem.id === item.id ? { ...agendaItem, time: value } : agendaItem,
-                                          ),
-                                        }
+                                        ...agenda,
+                                        items: agenda.items.map((agendaItem) =>
+                                          agendaItem.id === item.id ? { ...agendaItem, time: value } : agendaItem,
+                                        ),
+                                      }
                                       : agenda,
                                   ),
                                 );
                               }}
-                              className="h-10 rounded-xl bg-white pl-9"
+                              className="h-10 rounded-xl bg-white pl-9 dark:bg-slate-900 dark:text-slate-100"
                             />
                           </div>
                         </div>
@@ -4117,21 +4261,21 @@ function EventDetailPage() {
 
                 <button
                   type="button"
-                  className="mt-4 inline-flex items-center rounded-full border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+                  className="mt-4 inline-flex items-center rounded-full border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
                   onClick={() =>
                     setAgendaSections((prev) =>
                       prev.map((agenda) =>
                         agenda.id === section.id
                           ? {
-                              ...agenda,
-                              items: [...agenda.items, { id: createAgendaItemId(), title: '', time: '', date: '' }],
-                            }
+                            ...agenda,
+                            items: [...agenda.items, { id: createAgendaItemId(), title: '', time: '', date: '' }],
+                          }
                           : agenda,
                       ),
                     )
                   }
                 >
-                  + បន្ថែមកម្មវិធី
+                  + {S.schedule.addItem}
                 </button>
               </div>
             </div>
@@ -4139,7 +4283,7 @@ function EventDetailPage() {
 
           <button
             type="button"
-            className="inline-flex w-full items-center justify-center rounded-full border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+            className="inline-flex w-full items-center justify-center rounded-full border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
             onClick={() =>
               setAgendaSections((prev) => [
                 ...prev,
@@ -4151,7 +4295,7 @@ function EventDetailPage() {
               ])
             }
           >
-            + បន្ថែមរបៀបវារៈ
+            + {S.schedule.addSection}
           </button>
 
           <div className="flex justify-end">
@@ -4162,7 +4306,7 @@ function EventDetailPage() {
               disabled={isSavingAgenda}
             >
               <Save className="h-4 w-4" />
-              {isSavingAgenda ? 'កំពុងរក្សាទុក...' : 'រក្សាទុករបៀបវារៈ'}
+              {isSavingAgenda ? S.schedule.saving : S.schedule.save}
             </button>
           </div>
         </div>
@@ -4170,9 +4314,87 @@ function EventDetailPage() {
     </section>
   );
 
-  const handleRemoveMyTemplate = (id: string) => {
+  const handleRemoveMyTemplate = async (id: string) => {
+    const confirmed = await requestConfirmation(S.myTemplate.confirmRemove);
+    if (!confirmed) {
+      return;
+    }
+
     removeMyTemplate(id);
-    setMyTemplates(getSavedMyTemplates());
+    const remaining = getSavedMyTemplates();
+    setMyTemplates(remaining);
+
+    if (!event || activeMyTemplateId !== id) {
+      return;
+    }
+
+    const metadata =
+      event.metadata && typeof event.metadata === 'object'
+        ? (event.metadata as Record<string, unknown>)
+        : {};
+    const eventScoped = remaining
+      .filter((item) => item.eventId === eventId)
+      .sort((a, b) => (a.savedAt < b.savedAt ? 1 : -1));
+    const fallback = eventScoped[0] || null;
+
+    void apiClient
+      .updateEvent(event.id, {
+        templateId: fallback?.templateId || event.templateId,
+        metadata: {
+          ...metadata,
+          activeMyTemplateId: fallback?.id || undefined,
+        },
+      })
+      .then((updated) => setEvent(updated))
+      .catch(() => {
+        // keep local removal even if server sync fails
+      });
+  };
+
+  const handleActivateMyTemplate = async (template: MyTemplateItem) => {
+    if (!event || activatingMyTemplateId || activeMyTemplateId === template.id) {
+      return;
+    }
+
+    setActivatingMyTemplateId(template.id);
+    setError('');
+    setSuccess('');
+
+    try {
+      const metadata =
+        event.metadata && typeof event.metadata === 'object'
+          ? (event.metadata as Record<string, unknown>)
+          : {};
+
+      const currentSnapshots =
+        metadata.myTemplateSnapshots && typeof metadata.myTemplateSnapshots === 'object'
+          ? (metadata.myTemplateSnapshots as Record<string, unknown>)
+          : {};
+
+      const updated = await apiClient.updateEvent(event.id, {
+        templateId: template.templateId,
+        metadata: {
+          ...metadata,
+          activeMyTemplateId: template.id,
+          myTemplateSnapshots: {
+            ...currentSnapshots,
+            [template.id]: {
+              name: template.name,
+              templateId: template.templateId,
+              builderState: template.builderState,
+              updatedAt: new Date().toISOString(),
+            },
+          },
+        },
+      });
+
+      setEvent(updated);
+      setSuccess(S.myTemplate.useSuccess);
+    } catch {
+      setError(S.myTemplate.useFail);
+    } finally {
+      setActivatingMyTemplateId(null);
+    }
   };
 
   const handlePreviewMyTemplate = async (templateId: string) => {
@@ -4192,7 +4414,7 @@ function EventDetailPage() {
 
   const formatBuilderEventDate = (rawDate?: string) => {
     if (!rawDate) {
-      return 'ថ្ងៃរៀបអាពាហ៍ពិពាហ៍';
+      return S.builderDefaults.weddingDay;
     }
 
     const parsed = new Date(rawDate);
@@ -4238,42 +4460,80 @@ function EventDetailPage() {
     const agenda = Array.isArray(metadata?.agenda) && metadata?.agenda.length > 0
       ? metadata.agenda
       : [
-          {
-            id: `agenda-${Date.now()}`,
-            title: 'របៀបវារៈទី1',
-            items: [{ id: `agenda-item-${Date.now()}`, title: '', date: dateOnly, time: '' }],
-          },
-        ];
+        {
+          id: `agenda-${Date.now()}`,
+          title: S.builderDefaults.agendaSection,
+          items: [{ id: `agenda-item-${Date.now()}`, title: '', date: dateOnly, time: '' }],
+        },
+      ];
+
+    const templateImage = getEventTemplateCatalogImage(sourceEvent);
+    const styleDefaults = getTemplateStyleDefaults(sourceEvent.template);
 
     return {
-      language: 'km',
+      styleVariant: styleDefaults.styleVariant as BuilderState['styleVariant'],
+      templateId: sourceEvent.templateId || sourceEvent.template?.id,
+      language: language === 'km' ? 'km' : 'en',
       musicEnabled: true,
       musicId: 'classic',
-      musicUrl: sourceEvent.musicUrl || '/audio/wedding.mp3',
-      textColor: '#e6c628',
-      headingColor: '#142e7b',
-      coverImageUrl: sourceEvent.coverImage || '',
-      backgroundUrl: '/GlfpFt.jpg',
-      eventTitle: sourceEvent.title || 'សិរីមង្គលអាពាហ៍ពិពាហ៍',
+      musicUrl: sourceEvent.musicUrl || Assets.weddingMusic,
+      textColor: styleDefaults.textColor,
+      headingColor: styleDefaults.headingColor,
+      coverImageUrl: templateImage || getSeededCoverImage(sourceEvent.id || sourceEvent.title || sourceEvent.date),
+      backgroundUrl: styleDefaults.backgroundUrl,
+      eventTitle: sourceEvent.title || S.builderDefaults.eventTitle,
       eventSubtitle: '',
       eventDate: formatBuilderEventDate(sourceEvent.date),
       eventEndDate:
         typeof metadata?.eventEndDate === 'string' && metadata.eventEndDate.trim()
           ? metadata.eventEndDate
           : formatBuilderEventDate(sourceEvent.date),
-      eventLocation: sourceEvent.location || 'ទីតាំងកម្មវិធី',
-      greetingTitle: 'យើងខ្ញុំមានកិត្តិយសសូមគោរពអញ្ជើញ',
-      greetingMessage:
-        'សម្តេច ទ្រង់ ឯកឧត្តម លោកជំទាវ លោកអ្នកឧកញ៉ា អ្នកឧកញ៉ា ឧកញ៉ា លោក លោកស្រី អ្នកនាង កញ្ញា ព្រមទាំងប្រិយមិត្តអញ្ជើញចូលរួមជាអធិបតី និងជាភ្ញៀវកិត្តិយស ដើម្បីប្រសិទ្ធិពរជ័យសិរីសួស្តី ជ័យមង្គល ក្នុងពិធីអាពាហ៍ពិពាហ៍ កូនប្រុសស្រី របស់យើងខ្ញុំទាំងពីរ។',
+      eventLocation: sourceEvent.location || S.builderDefaults.eventLocation,
+      greetingTitle: S.invitationSeed.greetingTitle,
+      greetingMessage: S.invitationSeed.greetingMessage,
       agendaSections: agenda as BuilderState['agendaSections'],
       mapUrl: sourceEvent.googleMapLink || '',
-      mapImageUrl: '/map.png',
-      galleryImages: [],
-      thankYouTitle: 'សូមអរគុណ និងសូមអភ័យទោស',
-      thankYouMessage:
-        'យើងខ្ញុំទាំងពីរ សូមថ្លែងអំណរគុណ យ៉ាងជ្រាលជ្រៅ ចំពោះវត្តមាន ដ៏ឧត្តុង្គឧត្តមរបស់ សម្តេច ឯកឧត្តម លោកជំទាវ លោកអ្នកឧកញ៉ា អ្នកឧកញ៉ា ឧកញ៉ា លោក លោកស្រី អ្នកនាង កញ្ញា ដែលបាន អញ្ជើញចូលរួមជាកិត្តិយស ក្នុងពិធីសិរីសួស្តីអាពាហ៍ពិពាហ៍ របស់យើងខ្ញុំ នាពេលខាងមុខនេះ។ យើងខ្ញុំសូមការខន្តីអភ័យទោស ដែលពុំបានជូនលិខិតអញ្ជើញ ដោយផ្ទាល់ ។ ដោយការវកិច្ចដ៏ខ្ពង់ខ្ពស់ពីយើងខ្ញុំ។',
-      khqrUsdUrl: sourceEvent.khqrDollar || '',
-      khqrKhrUrl: sourceEvent.khqrRiel || '',
+      mapImageUrl: Assets.map,
+      galleryImages: getSeededGalleryImages(sourceEvent.id || sourceEvent.title || sourceEvent.date),
+      thankYouTitle: S.invitationSeed.thankYouTitle,
+      thankYouMessage: S.invitationSeed.thankYouMessage,
+      khqrUsdUrl: sourceEvent.khqrDollar || Assets.khqrSampleAbaPay,
+      khqrKhrUrl: sourceEvent.khqrRiel || Assets.khqrSampleAbaPay,
+    };
+  };
+
+  /** Builder slice for template-shop cards so the cover matches InvitationBuilder / PreviewPanel (ImageCover). */
+  const buildTemplateShopCoverPreviewState = (
+    sourceEvent: Event,
+    catalogTemplate: Template,
+    previewCoverUrl: string,
+    linked: MyTemplateItem | undefined,
+  ): BuilderState => {
+    const base = createBuilderStateSnapshot(sourceEvent);
+    const style = getTemplateStyleDefaults(catalogTemplate);
+    const cover =
+      typeof previewCoverUrl === 'string' && previewCoverUrl.trim().length > 0
+        ? previewCoverUrl.trim()
+        : base.coverImageUrl;
+
+    if (linked?.builderState) {
+      const saved = linked.builderState as BuilderState;
+      return {
+        ...base,
+        ...saved,
+        templateId: catalogTemplate.id,
+        coverImageUrl: cover || saved.coverImageUrl || base.coverImageUrl,
+      };
+    }
+
+    return {
+      ...base,
+      templateId: catalogTemplate.id,
+      styleVariant: style.styleVariant as BuilderState['styleVariant'],
+      textColor: style.textColor,
+      headingColor: style.headingColor,
+      backgroundUrl: style.backgroundUrl || base.backgroundUrl,
+      coverImageUrl: cover || base.coverImageUrl,
     };
   };
 
@@ -4285,13 +4545,26 @@ function EventDetailPage() {
     try {
       const updatedEvent = await apiClient.updateEvent(eventId, { templateId: template.id });
       const snapshot = createBuilderStateSnapshot(updatedEvent);
+      const existingActiveId =
+        updatedEvent.metadata && typeof updatedEvent.metadata === 'object'
+          ? (() => {
+            const metadata = updatedEvent.metadata as Record<string, unknown>;
+            return typeof metadata.activeMyTemplateId === 'string' ? metadata.activeMyTemplateId : '';
+          })()
+          : '';
 
       const saved = saveMyTemplate({
         templateId: template.id,
         eventId: updatedEvent.id,
         name: template.name,
-        thumbnail: snapshot.coverImageUrl || template.thumbnail || template.previewUrl || updatedEvent.coverImage,
-        previewUrl: snapshot.coverImageUrl || template.previewUrl || template.thumbnail || updatedEvent.coverImage,
+        thumbnail:
+          snapshot.coverImageUrl ||
+          snapshot.backgroundUrl ||
+          getTemplateCatalogImage(updatedEvent.template || template),
+        previewUrl:
+          snapshot.coverImageUrl ||
+          snapshot.backgroundUrl ||
+          getTemplateCatalogImage(updatedEvent.template || template),
         eventTypeId: updatedEvent.eventTypeId,
         eventTypeName: updatedEvent.eventType?.name || template.eventType?.name,
         builderState: snapshot,
@@ -4310,10 +4583,13 @@ function EventDetailPage() {
       const syncedEvent = await apiClient.updateEvent(updatedEvent.id, {
         metadata: {
           ...updatedMetadata,
+          // Keep currently active template unchanged; users switch active only from "My templates".
+          activeMyTemplateId: existingActiveId || saved.id,
           myTemplateSnapshots: {
             ...currentSnapshots,
             [saved.id]: {
               name: saved.name,
+              templateId: saved.templateId,
               builderState: saved.builderState,
               updatedAt: new Date().toISOString(),
             },
@@ -4323,57 +4599,104 @@ function EventDetailPage() {
 
       setEvent(syncedEvent);
       setMyTemplates(getSavedMyTemplates());
-      setSuccess('បានយកមកប្រើ និងរក្សាទុកក្នុង គំរូធៀបខ្ញុំ រួចរាល់');
+      setSuccess(S.messages.useTemplateSuccess);
     } catch (previewError) {
       console.error('Failed to apply template and save:', previewError);
-      setError('មិនអាចយកគំរូនេះមកប្រើបានទេ');
+      setError(S.messages.useTemplateError);
     } finally {
       setPreviewingTemplateId(null);
     }
   };
 
   const renderMyTemplateTab = () => (
-    <section className="space-y-5 rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
+    <section className="space-y-5 rounded-xl border border-gray-100 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
       <div className="flex items-center justify-between gap-3">
-        <p className="text-sm text-gray-500">គំរូធៀបខ្ញុំ</p>
+        <p className="text-sm text-gray-500 dark:text-slate-400">{S.myTemplate.sectionLabel}</p>
         <Button
           type="button"
           variant="outline"
           size="sm"
           onClick={() => setMyTemplates(getSavedMyTemplates())}
+          className="dark:border-slate-700 dark:bg-black dark:text-white dark:hover:bg-slate-900"
         >
           <RefreshCw className="mr-2 h-4 w-4" />
-          ផ្ទុកឡើងវិញ
+          {S.myTemplate.reload}
         </Button>
       </div>
 
       {eventMyTemplates.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-gray-200 p-6 text-center text-sm text-gray-600">
-          មិនទាន់មានគំរូសម្រាប់ព្រឹត្តិការណ៍នេះទេ។
+        <div className="rounded-lg border border-dashed border-gray-200 p-6 text-center text-sm text-gray-600 dark:border-slate-700 dark:text-slate-300">
+          {S.myTemplate.empty}
         </div>
       ) : (
         <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
           {eventMyTemplates.map((template) => {
-            const previewImage = template.thumbnail || template.previewUrl || event?.coverImage || '/map.png';
+            const previewImage =
+              template.thumbnail ||
+              template.previewUrl ||
+              template.builderState?.coverImageUrl ||
+              template.builderState?.backgroundUrl ||
+              Assets.mainThumbnail1;
+            const coverPreviewData = event
+              ? (() => {
+                const base = createBuilderStateSnapshot(event);
+                return {
+                  ...base,
+                  ...(template.builderState || {}),
+                  templateId: template.templateId || base.templateId,
+                  coverImageUrl: previewImage || template.builderState?.coverImageUrl || base.coverImageUrl,
+                } as BuilderState;
+              })()
+              : undefined;
+            const isInUse = activeMyTemplateForInvite?.id === template.id;
 
             return (
-              <div key={template.id} className="overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-sm">
-                <div className="relative h-64 bg-gray-50 p-4">
-                  <img
-                    src={previewImage}
-                    alt={template.name}
-                    className="h-full w-full rounded-2xl object-cover shadow-sm"
-                  />
-                  <div className="absolute left-6 top-6 rounded-full bg-white/95 px-3 py-1 text-xs font-semibold text-[#C52133] shadow-sm backdrop-blur">
+              <div key={template.id} className="overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
+                <div className="relative bg-gray-50 p-4 dark:bg-slate-800">
+                  <div className="relative aspect-[2/3] w-full overflow-hidden rounded-2xl shadow-sm">
+                    <div className="absolute inset-0 overflow-hidden bg-[#f7f1e8]">
+                      {coverPreviewData ? (
+                        <div className="pointer-events-none absolute left-1/2 top-0 w-[28rem] max-w-[200%] -translate-x-1/2 origin-top scale-[0.56] sm:scale-[0.6] md:scale-[0.58] xl:scale-[0.64]">
+                          <Suspense
+                            fallback={
+                              <div className="flex h-160 w-full items-center justify-center bg-[#f7f1e8] dark:bg-slate-900">
+                                <span className="text-xs text-gray-400 dark:text-slate-500">...</span>
+                              </div>
+                            }
+                          >
+                            <ImageCover data={coverPreviewData} />
+                          </Suspense>
+                        </div>
+                      ) : (
+                        <div
+                          className="absolute inset-0"
+                          style={{
+                            backgroundImage: `url(${previewImage})`,
+                            backgroundSize: 'cover',
+                            backgroundPosition: 'center top',
+                          }}
+                        />
+                      )}
+                    </div>
+                  </div>
+                  <div className="absolute left-6 top-6 rounded-full bg-white/95 px-3 py-1 text-xs font-semibold text-[#C52133] shadow-sm backdrop-blur dark:bg-slate-900/95 dark:text-rose-300">
                     {template.eventTypeName || 'Template'}
                   </div>
                 </div>
 
                 <div className="space-y-4 p-5 pt-2">
                   <div>
-                    <h3 className="font-khmer-heading text-lg text-gray-900">{template.name}</h3>
-                    <p className="mt-1 text-xs text-gray-500">
-                      រក្សាទុកនៅ {new Date(template.savedAt).toLocaleString('km-KH')}
+                    <div className="flex items-center justify-between gap-2">
+                      <h3 className="font-khmer-heading text-lg text-gray-900 dark:text-slate-100">{template.name}</h3>
+                      {isInUse ? (
+                        <span className="shrink-0 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
+                          {S.myTemplate.inUseBadge}
+                        </span>
+                      ) : null}
+                    </div>
+                    <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
+                      {S.myTemplate.savedAt}{' '}
+                      {new Date(template.savedAt).toLocaleString(isKhmer ? 'km-KH' : 'en-US')}
                     </p>
                   </div>
 
@@ -4382,29 +4705,43 @@ function EventDetailPage() {
                       <Button
                         type="button"
                         variant="outline"
-                        className="w-full border-gray-200 text-gray-700 hover:bg-gray-50"
+                        className="w-full border-gray-200 text-gray-700 hover:bg-gray-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800 dark:hover:text-white"
                       >
                         <Eye className="mr-2 h-4 w-4" />
-                        មើល
+                        {S.myTemplate.view}
                       </Button>
                     </Link>
 
                     <Link href={`/events/${eventId}/builder?myTemplateId=${template.id}`} className="flex-1">
                       <Button type="button" className="w-full bg-[#C52133] text-white hover:bg-[#aa1b2a]">
                         <Pencil className="mr-2 h-4 w-4" />
-                        កែប្រែវិញ
+                        {S.myTemplate.edit}
                       </Button>
                     </Link>
                   </div>
 
                   <Button
                     type="button"
+                    variant={isInUse ? 'outline' : 'default'}
+                    className={
+                      isInUse
+                        ? 'w-full border-emerald-200 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-300 dark:hover:bg-emerald-900/30'
+                        : 'w-full bg-[#7A1F2B] text-white hover:bg-[#651925]'
+                    }
+                    disabled={isInUse || activatingMyTemplateId === template.id}
+                    onClick={() => handleActivateMyTemplate(template)}
+                  >
+                    {activatingMyTemplateId === template.id ? S.myTemplate.usingThis : S.myTemplate.useThis}
+                  </Button>
+
+                  <Button
+                    type="button"
                     variant="ghost"
-                    className="w-full text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+                    className="w-full text-rose-600 hover:bg-rose-50 hover:text-rose-700 dark:text-rose-300 dark:hover:bg-rose-900/25 dark:hover:text-rose-200"
                     onClick={() => handleRemoveMyTemplate(template.id)}
                   >
                     <Trash2 className="mr-2 h-4 w-4" />
-                    លុបចេញពីគំរូធៀបខ្ញុំ
+                    {S.myTemplate.remove}
                   </Button>
                 </div>
               </div>
@@ -4415,190 +4752,149 @@ function EventDetailPage() {
     </section>
   );
 
-  const renderTemplateShopTab = () => (
-    <section className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="font-khmer-heading text-2xl text-gray-900">ហាងគំរូធៀប</h2>
-          <p className="mt-1 text-sm text-gray-500">ជ្រើសរើសគំរូហើយចុច “រៀបចំធៀប” ដើម្បីកែតម្រូវ។</p>
+  const renderTemplateShopTab = () => {
+    if (!event) {
+      return null;
+    }
+
+    return (
+      <section className="space-y-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="font-khmer-heading text-2xl text-gray-900 dark:text-slate-100">{S.shop.title}</h2>
+            <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">{S.shop.subtitle}</p>
+          </div>
         </div>
-        {event?.template && (
-          <div className="rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs font-semibold text-emerald-700">
-            បានជ្រើសរើស: {event.template.name}
+
+        {templateError && (
+          <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700 dark:border-rose-700 dark:bg-rose-900/30 dark:text-rose-300">
+            {templateError}
           </div>
         )}
-      </div>
 
-      {templateError && (
-        <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
-          {templateError}
-        </div>
-      )}
+        {isTemplatesLoading ? (
+          <div className="rounded-2xl border border-dashed border-gray-200 bg-white p-8 text-center text-sm text-gray-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
+            {S.shop.loading}
+          </div>
+        ) : templates.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-gray-200 bg-white p-8 text-center text-sm text-gray-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
+            {S.shop.empty}
+          </div>
+        ) : (
+          <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+            {templates.map((template) => {
+              const eventTypeLabel = template.eventType?.name || 'Wedding';
 
-      {isTemplatesLoading ? (
-        <div className="rounded-2xl border border-dashed border-gray-200 bg-white p-8 text-center text-sm text-gray-500">
-          កំពុងទាញយកគំរូធៀប...
-        </div>
-      ) : templates.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-gray-200 bg-white p-8 text-center text-sm text-gray-500">
-          មិនមានគំរូធៀបទេ។
-        </div>
-      ) : (
-        <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-          {templates.map((template) => {
-            const previewImage = template.thumbnail || template.previewUrl;
-            const description =
-              typeof template.config?.description === 'string' && template.config.description.trim()
-                ? template.config.description.trim()
-                : '';
-            const eventTypeLabel = template.eventType?.name || 'Wedding';
-            const subtitle = description || `គំរូសម្រាប់កម្មវិធី ${eventTypeLabel}`;
-            
-            const eventTitle = event?.title || 'កម្មវិធីរបស់យើង';
-            const eventDate = event?.date ? new Date(event.date).toLocaleDateString('km-KH') : '';
-            const location = event?.location || '';
-            const eventCoverImage = event?.coverImage;
+              const eventTitle = event.title || S.shop.defaultEventTitle;
 
-            const fallbackPreview = eventCoverImage || `data:image/svg+xml;utf8,${encodeURIComponent(
-              `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="1200" viewBox="0 0 800 1200">
-  <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#fff0f2" />
-      <stop offset="100%" stop-color="#ffe4e8" />
-    </linearGradient>
-    <filter id="shadow">
-      <feDropShadow dx="0" dy="10" stdDeviation="15" flood-opacity="0.1"/>
-    </filter>
-  </defs>
-  <rect width="800" height="1200" fill="url(#bg)" />
-  <rect x="50" y="50" width="700" height="1100" fill="#ffffff" rx="20" filter="url(#shadow)" />
-  <rect x="70" y="70" width="660" height="1060" fill="none" stroke="#d4af37" stroke-width="2" rx="10" />
-  
-  <text x="400" y="200" text-anchor="middle" fill="#9f1239" font-family="'Segoe UI', Arial, sans-serif" font-size="28" letter-spacing="4">សូមគោរពអញ្ជើញ</text>
-  <text x="400" y="450" text-anchor="middle" fill="#500724" font-family="'Segoe UI', Arial, sans-serif" font-size="54" font-weight="bold">${eventTitle}</text>
-  <text x="400" y="550" text-anchor="middle" fill="#9f1239" font-family="'Segoe UI', Arial, sans-serif" font-size="24">(${template.name})</text>
-  <rect x="300" y="650" width="200" height="2" fill="#d4af37" />
-  <text x="400" y="750" text-anchor="middle" fill="#500724" font-family="'Segoe UI', Arial, sans-serif" font-size="32">${eventDate}</text>
-  <text x="400" y="850" text-anchor="middle" fill="#881337" font-family="'Segoe UI', Arial, sans-serif" font-size="28">${location}</text>
-</svg>`,
-            )}`;
+              const linkedMyTemplate = myTemplates.find(
+                (item) => item.eventId === eventId && item.templateId === template.id,
+              );
 
-            const linkedMyTemplate = myTemplates.find(
-              (item) => item.eventId === eventId && item.templateId === template.id,
-            );
+              const savedCover =
+                typeof linkedMyTemplate?.builderState?.coverImageUrl === 'string'
+                  ? linkedMyTemplate.builderState.coverImageUrl.trim()
+                  : '';
+              const savedThumb =
+                typeof linkedMyTemplate?.thumbnail === 'string' ? linkedMyTemplate.thumbnail.trim() : '';
+              const catalogForRow = getTemplateCatalogImage(template);
+              const snapshotCover = getBuilderCoverFromMyTemplateSnapshots(event.metadata, template.id);
+              const previewImage =
+                (savedCover.length > 0 ? savedCover : undefined) ||
+                snapshotCover ||
+                (savedThumb.length > 0 ? savedThumb : undefined) ||
+                catalogForRow ||
+                Assets.mainThumbnail1;
 
-            return (
-              <div key={template.id} className="overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-sm">
-                <div className="relative h-64 bg-gray-50 p-4">
-                  <img
-                    src={previewImage || fallbackPreview}
-                    alt={eventTitle}
-                    className="h-full w-full rounded-2xl object-cover shadow-sm"
-                  />
-                  <div className="absolute left-6 top-6 rounded-full bg-white/95 px-3 py-1 text-xs font-semibold text-[#C52133] shadow-sm backdrop-blur">
-                    {eventTypeLabel}
+              const coverPreviewData = buildTemplateShopCoverPreviewState(
+                event,
+                template,
+                previewImage,
+                linkedMyTemplate,
+              );
+
+              return (
+                <div key={template.id} className="overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
+                  <div className="relative bg-gray-50 p-4 dark:bg-slate-800">
+                    <div className="relative aspect-[2/3] w-full overflow-hidden rounded-2xl shadow-sm">
+                      <div className="absolute inset-0 overflow-hidden bg-[#f7f1e8]">
+                        <div className="pointer-events-none absolute left-1/2 top-0 w-[28rem] max-w-[200%] -translate-x-1/2 origin-top scale-[0.56] sm:scale-[0.6] md:scale-[0.58] xl:scale-[0.64]">
+                          <Suspense
+                            fallback={
+                              <div className="flex h-160 w-full items-center justify-center bg-[#f7f1e8] dark:bg-slate-900">
+                                <span className="text-xs text-gray-400 dark:text-slate-500">…</span>
+                              </div>
+                            }
+                          >
+                            <ImageCover data={coverPreviewData} />
+                          </Suspense>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="absolute left-6 top-6 rounded-full bg-white/95 px-3 py-1 text-xs font-semibold text-[#C52133] shadow-sm backdrop-blur dark:bg-slate-900/95 dark:text-rose-300">
+                      {eventTypeLabel}
+                    </div>
                   </div>
-                </div>
-                <div className="space-y-4 p-5 pt-2">
-                  <div>
-                    <h3 className="font-khmer-heading text-lg text-gray-900">{eventTitle}</h3>
-                    <p className="mt-1 text-sm text-gray-500 line-clamp-2">គំរូធៀប៖ {template.name}</p>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    {linkedMyTemplate ? (
-                      <>
-                        <Link href={`/events/${eventId}/my-template/${linkedMyTemplate.id}`} className="flex-1">
+                  <div className="space-y-4 p-5 pt-2">
+                    <div>
+                      <h3 className="font-khmer-heading text-lg text-gray-900 dark:text-slate-100">{eventTitle}</h3>
+                      <p className="mt-1 text-sm text-gray-500 line-clamp-2 dark:text-slate-400">
+                        {S.shop.templateLine} {template.name}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {linkedMyTemplate ? (
+                        <>
+                          <Link href={`/events/${eventId}/my-template/${linkedMyTemplate.id}`} className="flex-1">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="w-full border-gray-200 text-gray-700 hover:bg-gray-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800 dark:hover:text-white"
+                            >
+                              <Eye className="mr-2 h-4 w-4" />
+                              {S.shop.view}
+                            </Button>
+                          </Link>
+                          <Link href={`/events/${eventId}/builder?myTemplateId=${linkedMyTemplate.id}`} className="flex-1">
+                            <Button type="button" className="w-full bg-[#C52133] text-white hover:bg-[#aa1b2a]">
+                              <Pencil className="mr-2 h-4 w-4" />
+                              {S.shop.edit}
+                            </Button>
+                          </Link>
+                        </>
+                      ) : (
+                        <>
                           <Button
                             type="button"
                             variant="outline"
-                            className="w-full border-gray-200 text-gray-700 hover:bg-gray-50"
+                            className="w-full flex-1 border-gray-200 text-gray-700 hover:bg-gray-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800 dark:hover:text-white"
+                            onClick={() => handleUseTemplateAndSave(template)}
+                            disabled={previewingTemplateId === template.id}
                           >
-                            <Eye className="mr-2 h-4 w-4" />
-                            មើល
+                            <Check className="mr-2 h-4 w-4" />
+                            {previewingTemplateId === template.id ? S.shop.usingTemplate : S.shop.useTemplate}
                           </Button>
-                        </Link>
-                        <Link href={`/events/${eventId}/builder?myTemplateId=${linkedMyTemplate.id}`} className="flex-1">
-                          <Button type="button" className="w-full bg-[#C52133] text-white hover:bg-[#aa1b2a]">
-                            <Pencil className="mr-2 h-4 w-4" />
-                            កែប្រែវិញ
-                          </Button>
-                        </Link>
-                      </>
-                    ) : (
-                      <>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="w-full flex-1 border-gray-200 text-gray-700 hover:bg-gray-50"
-                          onClick={() => handleUseTemplateAndSave(template)}
-                          disabled={previewingTemplateId === template.id}
-                        >
-                          <Check className="mr-2 h-4 w-4" />
-                          {previewingTemplateId === template.id ? 'កំពុងយកមកប្រើ...' : 'យកមកប្រើ'}
-                        </Button>
-                        <Link
-                          href={`/events/${eventId}/builder?templateId=${template.id}`}
-                          className="flex-1"
-                        >
-                          <Button type="button" className="w-full bg-[#C52133] text-white hover:bg-[#aa1b2a]">
-                            <Pencil className="mr-2 h-4 w-4" />
-                            រៀបចំធៀប
-                          </Button>
-                        </Link>
-                      </>
-                    )}
+                          <Link
+                            href={`/events/${eventId}/builder?templateId=${template.id}`}
+                            className="flex-1"
+                          >
+                            <Button type="button" className="w-full bg-[#C52133] text-white hover:bg-[#aa1b2a]">
+                              <Pencil className="mr-2 h-4 w-4" />
+                              {S.shop.customize}
+                            </Button>
+                          </Link>
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </section>
-  );
-
-  const renderQrTab = () => (
-    <section className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="font-khmer-heading text-2xl text-gray-900">បង្កើត QR</h2>
-          <p className="mt-1 text-sm text-gray-500">ទាញយក QR សម្រាប់ចែករំលែកការអញ្ជើញ</p>
-        </div>
-      </div>
-
-      {invitationUrl ? (
-        <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
-          <div className="rounded-2xl border border-gray-100 bg-gray-50 p-5">
-            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Invitation Link</p>
-            <div className="mt-3 rounded-xl border border-gray-200 bg-white p-3 text-sm text-gray-700 break-all">
-              {invitationUrl}
-            </div>
-            <p className="mt-3 text-xs text-gray-500">ប្រើតំណនេះសម្រាប់បញ្ជូនទៅភ្ញៀវ។</p>
+              );
+            })}
           </div>
-
-          <div className="flex flex-col items-center rounded-2xl border border-gray-100 bg-white p-5">
-            <div className="flex h-56 w-56 items-center justify-center rounded-2xl border border-dashed border-gray-200 bg-gray-50">
-              <img
-                src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(invitationUrl)}`}
-                alt="Invitation QR"
-                className="h-48 w-48"
-              />
-            </div>
-            <a
-              href={`https://api.qrserver.com/v1/create-qr-code/?size=1024x1024&data=${encodeURIComponent(invitationUrl)}`}
-              target="_blank"
-              rel="noreferrer"
-              className="mt-4 inline-flex h-11 items-center rounded-full bg-[#C52133] px-5 text-sm font-semibold text-white hover:bg-[#aa1b2a]"
-            >
-              ទាញយក QR
-            </a>
-          </div>
-        </div>
-      ) : (
-        <p className="text-sm text-gray-600">កំពុងបង្កើតតំណភ្ជាប់...</p>
-      )}
-    </section>
-  );
+        )}
+      </section>
+    );
+  };
 
   const renderExpensesTab = () => {
     const totalRecords = expenseRows.length;
@@ -4789,7 +5085,7 @@ function EventDetailPage() {
     };
 
     const handleDeleteExpenseRow = async (id: string) => {
-      const confirmed = window.confirm('តើអ្នកចង់លុបចំណាយនេះមែនទេ?');
+      const confirmed = await requestConfirmation(S.expenses.confirmDeleteOne);
       if (!confirmed) return;
 
       try {
@@ -4799,22 +5095,26 @@ function EventDetailPage() {
         setError('');
       } catch (deleteError) {
         setSuccess('');
-        setError(extractApiErrorMessage(deleteError) || 'មិនអាចលុបចំណាយបានទេ');
+        setError(extractApiErrorMessage(deleteError) || S.expenses.deleteFail);
       }
     };
 
     const handleDeleteSelectedExpenseRows = async () => {
       const targetIds = selectedExpenseRowIds.length > 0 ? selectedExpenseRowIds : expenseRows.map((row) => row.id);
       if (targetIds.length === 0) {
-        setError('មិនមានទិន្នន័យសម្រាប់លុបទេ');
+        setError(S.expenses.deleteNoData);
         setSuccess('');
         return;
       }
 
       const confirmed =
         selectedExpenseRowIds.length > 0
-          ? window.confirm(`តើអ្នកចង់លុបចំណាយចំនួន ${targetIds.length} មែនទេ?`)
-          : window.confirm('មិនបានជ្រើសចំណាយ។ តើអ្នកចង់លុបទាំងអស់មែនទេ?');
+          ? await requestConfirmation(
+            isKhmer
+              ? `តើអ្នកចង់លុបចំណាយចំនួន ${targetIds.length} មែនទេ?`
+              : `Delete ${targetIds.length} expense(s)?`,
+          )
+          : await requestConfirmation(S.expenses.deleteAllPrompt);
       if (!confirmed) return;
 
       try {
@@ -4825,17 +5125,17 @@ function EventDetailPage() {
         if (deletedIds.length > 0) {
           setExpenseRows((prev) => prev.filter((row) => !deletedIds.includes(row.id)));
           setSelectedExpenseRowIds((prev) => prev.filter((id) => !deletedIds.includes(id)));
-          setSuccess('បានលុបទិន្នន័យចំណាយរួចរាល់');
+          setSuccess(S.expenses.deleteSuccess);
           setError('');
         }
 
         if (failedCount > 0) {
           setSuccess('');
-          setError('មិនអាចលុបទិន្នន័យចំណាយមួយចំនួនបានទេ');
+          setError(S.expenses.deleteSomeFail);
         }
       } catch {
         setSuccess('');
-        setError('មិនអាចលុបទិន្នន័យចំណាយមួយចំនួនបានទេ');
+        setError(S.expenses.deleteSomeFail);
       }
     };
 
@@ -4846,13 +5146,13 @@ function EventDetailPage() {
 
     const handleExportExpenseRows = async () => {
       if (expenseRows.length === 0) {
-        setError('មិនមានទិន្នន័យសម្រាប់ទាញយកទេ');
+        setError(S.expenses.exportNoData);
         setSuccess('');
         return;
       }
 
       setError('');
-      setSuccess('កំពុងរៀបចំឯកសារ Excel...');
+      setSuccess(S.expenses.preparingExcel);
 
       let rowIndex = 1;
       const exportRows = expenseRows.flatMap((expense) => {
@@ -4885,18 +5185,18 @@ function EventDetailPage() {
         const safeEventName = (event?.title || 'event').replace(/[\\/:*?"<>|]/g, '-');
         XLSX.writeFile(workbook, `${safeEventName}_Expenses_${stamp}.xlsx`);
 
-        setSuccess('ទាញយកបានជោគជ័យ!');
+        setSuccess(S.expenses.exportOk);
       } catch {
         setSuccess('');
-        setError('មិនអាចទាញយកឯកសារ Excel បានទេ');
+        setError(S.expenses.exportFail);
       }
     };
 
     return (
-      <section className="space-y-4 rounded-2xl bg-gray-50 p-4 font-khmer-body">
-        <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
+      <section className="space-y-4 rounded-2xl bg-gray-50 p-4 font-khmer-body dark:bg-slate-950">
+        <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <h2 className="font-khmer-heading text-2xl text-gray-900">ការគ្រប់គ្រងការចំណាយ</h2>
+            <h2 className="font-khmer-heading text-2xl text-gray-900 dark:text-slate-100">{S.expenses.title}</h2>
             <div className="flex flex-wrap items-center gap-2">
               <Button
                 type="button"
@@ -4904,53 +5204,53 @@ function EventDetailPage() {
                 onClick={() => setIsExpenseModalOpen(true)}
               >
                 <Plus className="mr-1 h-4 w-4" />
-                បន្ថែមថ្មី
+                {S.expenses.add}
               </Button>
               <button
                 type="button"
-                className="inline-flex h-10 items-center rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 hover:bg-gray-50"
+                className="inline-flex h-10 items-center rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 hover:bg-gray-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
                 onClick={() => {
                   resetExpenseImportState();
                   setIsExpenseImportOpen(true);
                 }}
               >
                 <Upload className="mr-1 h-4 w-4" />
-                បញ្ចូល Excel
+                {S.expenses.importExcel}
               </button>
               <button
                 type="button"
-                className="inline-flex h-10 items-center rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 hover:bg-gray-50"
+                className="inline-flex h-10 items-center rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 hover:bg-gray-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
                 onClick={handleExportExpenseRows}
               >
                 <Download className="mr-1 h-4 w-4" />
-                ទាញយក
+                {S.expenses.export}
               </button>
               <button
                 type="button"
-                className="inline-flex h-10 items-center rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 hover:bg-gray-50"
+                className="inline-flex h-10 items-center rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 hover:bg-gray-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
                 onClick={handleDeleteSelectedExpenseRows}
               >
                 <Trash2 className="mr-1 h-4 w-4" />
-                លុប
+                {S.expenses.delete}
               </button>
             </div>
           </div>
 
           <div className="mb-4">
             <div className="relative max-w-md">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-slate-400" />
               <Input
                 value={expenseSearch}
                 onChange={(event) => setExpenseSearch(event.target.value)}
-                placeholder="ស្វែងរក ..."
+                placeholder={S.expenses.searchPh}
                 className="h-11 rounded-full border-gray-200 pl-10"
               />
             </div>
           </div>
 
-          <div className="overflow-x-auto w-full max-w-full px-2 rounded-xl border border-gray-100 bg-white">
+          <div className="overflow-x-auto w-full max-w-full px-2 rounded-xl border border-gray-100 bg-white dark:border-slate-700 dark:bg-slate-900">
             <table className="min-w-full table-auto text-sm whitespace-nowrap">
-              <thead className="bg-gray-50">
+              <thead className="bg-gray-50 dark:bg-slate-800">
                 <tr>
                   <th className="w-12 px-5 py-3 text-left whitespace-nowrap">
                     <input
@@ -4966,57 +5266,57 @@ function EventDetailPage() {
                     />
                   </th>
                   {visibleColumns.name && (
-                    <th className="px-5 py-3 text-left font-semibold text-gray-700 whitespace-nowrap">
+                    <th className="px-5 py-3 text-left font-semibold text-gray-700 whitespace-nowrap dark:text-slate-200">
                       <button
                         type="button"
                         onClick={(event) => openMenu('name', event.currentTarget)}
                         className="inline-flex items-center gap-2"
                       >
-                        ឈ្មោះ
-                        <ArrowUpDown className="h-4 w-4 text-gray-500" />
+                        {S.expenses.thName}
+                        <ArrowUpDown className="h-4 w-4 text-gray-500 dark:text-slate-400" />
                       </button>
                     </th>
                   )}
                   {visibleColumns.budget && (
-                    <th className="px-5 py-3 text-left font-semibold text-gray-700 whitespace-nowrap">
+                    <th className="px-5 py-3 text-left font-semibold text-gray-700 whitespace-nowrap dark:text-slate-200">
                       <button
                         type="button"
                         onClick={(event) => openMenu('budget', event.currentTarget)}
                         className="inline-flex items-center gap-2"
                       >
-                        គ្រោងចំណាយ
-                        <ArrowUpDown className="h-4 w-4 text-gray-500" />
+                        {S.expenses.thBudget}
+                        <ArrowUpDown className="h-4 w-4 text-gray-500 dark:text-slate-400" />
                       </button>
                     </th>
                   )}
                   {visibleColumns.actual && (
-                    <th className="px-5 py-3 text-left font-semibold text-gray-700 whitespace-nowrap">
+                    <th className="px-5 py-3 text-left font-semibold text-gray-700 whitespace-nowrap dark:text-slate-200">
                       <button
                         type="button"
                         onClick={(event) => openMenu('actual', event.currentTarget)}
                         className="inline-flex items-center gap-2"
                       >
-                        ចំណាយជាក់ស្តែង
-                        <ArrowUpDown className="h-4 w-4 text-gray-500" />
+                        {S.expenses.thActual}
+                        <ArrowUpDown className="h-4 w-4 text-gray-500 dark:text-slate-400" />
                       </button>
                     </th>
                   )}
                   {visibleColumns.note && (
-                    <th className="px-5 py-3 text-left font-semibold text-gray-700 whitespace-nowrap">
+                    <th className="px-5 py-3 text-left font-semibold text-gray-700 whitespace-nowrap dark:text-slate-200">
                       <button
                         type="button"
                         onClick={(event) => openMenu('note', event.currentTarget)}
                         className="inline-flex items-center gap-2"
                       >
-                        ការពិពណ៌នា
-                        <ArrowUpDown className="h-4 w-4 text-gray-500" />
+                        {S.expenses.thDescription}
+                        <ArrowUpDown className="h-4 w-4 text-gray-500 dark:text-slate-400" />
                       </button>
                     </th>
                   )}
-                  <th className="px-5 py-3 text-right font-semibold text-gray-700 whitespace-nowrap">សកម្មភាព</th>
+                  <th className="px-5 py-3 text-right font-semibold text-gray-700 whitespace-nowrap dark:text-slate-200">{S.expenses.thActions}</th>
                 </tr>
               </thead>
-              <tbody className="bg-white">
+              <tbody className="bg-white dark:bg-slate-900">
                 {sortedExpenseRows.length === 0 ? (
                   <tr>
                     <td
@@ -5027,9 +5327,9 @@ function EventDetailPage() {
                         (visibleColumns.actual ? 1 : 0) +
                         (visibleColumns.note ? 1 : 0)
                       }
-                      className="px-5 py-14 text-center text-gray-500 whitespace-nowrap"
+                      className="px-5 py-14 text-center text-gray-500 whitespace-nowrap dark:text-slate-400"
                     >
-                      មិនមានទិន្នន័យ។
+                      {S.expenses.noDataRow}
                     </td>
                   </tr>
                 ) : (
@@ -5056,38 +5356,38 @@ function EventDetailPage() {
                         </td>
                         {visibleColumns.name && (
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="rounded-2xl border border-gray-100 bg-white px-4 py-3 text-sm text-[#7A1F2B] whitespace-nowrap">
+                            <div className="rounded-2xl border border-gray-100 bg-white px-4 py-3 text-sm text-[#7A1F2B] whitespace-nowrap dark:border-slate-700 dark:bg-slate-800 dark:text-rose-300">
                               {row.name}
                             </div>
                           </td>
                         )}
                         {visibleColumns.budget && (
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="rounded-2xl border border-gray-100 bg-white px-4 py-3 text-sm text-gray-700 whitespace-nowrap">
+                            <div className="rounded-2xl border border-gray-100 bg-white px-4 py-3 text-sm text-gray-700 whitespace-nowrap dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
                               ${formatCurrency(budgetValue)}
                             </div>
                           </td>
                         )}
                         {visibleColumns.actual && (
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="rounded-2xl border border-gray-100 bg-white px-4 py-3 text-sm text-gray-700 whitespace-nowrap">
-                              <div className="flex items-center justify-between text-xs text-gray-500 whitespace-nowrap">
+                            <div className="rounded-2xl border border-gray-100 bg-white px-4 py-3 text-sm text-gray-700 whitespace-nowrap dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                              <div className="flex items-center justify-between text-xs text-gray-500 whitespace-nowrap dark:text-slate-400">
                                 <span>${formatCurrency(actualValue)}</span>
                                 <span>${formatCurrency(budgetValue)}</span>
                               </div>
-                              <div className="mt-2 h-2 w-full rounded-full bg-gray-100">
+                              <div className="mt-2 h-2 w-full rounded-full bg-gray-100 dark:bg-slate-700">
                                 <div
                                   className="h-2 rounded-full bg-[#C52133]"
                                   style={{ width: `${percent}%` }}
                                 />
                               </div>
-                              <div className="mt-2 flex justify-end text-xs text-gray-500 whitespace-nowrap">{percent}%</div>
+                              <div className="mt-2 flex justify-end text-xs text-gray-500 whitespace-nowrap dark:text-slate-400">{percent}%</div>
                             </div>
                           </td>
                         )}
                         {visibleColumns.note && (
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="rounded-2xl border border-gray-100 bg-white px-4 py-3 text-sm text-gray-700 whitespace-nowrap">
+                            <div className="rounded-2xl border border-gray-100 bg-white px-4 py-3 text-sm text-gray-700 whitespace-nowrap dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
                               {row.note}
                             </div>
                           </td>
@@ -5097,7 +5397,7 @@ function EventDetailPage() {
                             <button
                               type="button"
                               onClick={() => handleEditExpenseRow(row)}
-                              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
+                              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
                             >
                               <Pencil className="h-4 w-4" />
                             </button>
@@ -5118,29 +5418,33 @@ function EventDetailPage() {
             </table>
           </div>
 
-          <div className="mt-4 flex flex-col gap-3 text-sm text-gray-600 md:flex-row md:items-center md:justify-between">
-            <p>សរុប: {totalRecords} កំណត់ត្រា</p>
+          <div className="mt-4 flex flex-col gap-3 text-sm text-gray-600 dark:text-slate-300 md:flex-row md:items-center md:justify-between">
+            <p>
+              {S.guests.totalLine}: {totalRecords} {S.guests.records}
+            </p>
             <div className="flex flex-wrap items-center gap-2">
-              <span>ទិន្នន័យក្នុងមួយទំព័រ</span>
-              <select className="h-8 rounded-md border border-gray-200 bg-white px-2">
+              <span>{S.guests.perPage}</span>
+              <select className="h-8 rounded-md border border-gray-200 bg-white px-2 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100">
                 <option value={10}>10</option>
                 <option value={25}>25</option>
                 <option value={50}>50</option>
               </select>
-              <span className="ml-2">ទំព័រ 1 នៃ {totalPages}</span>
+              <span className="ml-2">
+                {S.guests.pageXofY} 1 {S.guests.ofWord} {totalPages}
+              </span>
               <button
                 type="button"
-                className="rounded-md border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700 disabled:cursor-not-allowed disabled:opacity-40"
+                className="rounded-md border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 disabled:cursor-not-allowed disabled:opacity-40"
                 disabled
               >
-                ទៅទំព័រដំបូង
+                {S.guests.firstPage}
               </button>
               <button
                 type="button"
-                className="rounded-md border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700 disabled:cursor-not-allowed disabled:opacity-40"
+                className="rounded-md border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 disabled:cursor-not-allowed disabled:opacity-40"
                 disabled
               >
-                ទៅទំព័រមុន
+                {S.guests.prevPage}
               </button>
             </div>
           </div>
@@ -5150,7 +5454,7 @@ function EventDetailPage() {
           createPortal(
             <div
               ref={expenseMenuRef}
-              className="fixed z-[120] w-56 rounded-2xl border border-gray-100 bg-white shadow-sm"
+              className="fixed z-[120] w-56 rounded-2xl border border-gray-100 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900"
               style={{
                 top: expenseColumnMenu.anchorRect.bottom + 8,
                 left: expenseColumnMenu.anchorRect.left,
@@ -5159,27 +5463,27 @@ function EventDetailPage() {
               <button
                 type="button"
                 onClick={() => handleSortExpenseColumn('asc')}
-                className="flex w-full items-center gap-3 px-4 py-3 text-sm text-gray-600 hover:bg-gray-50"
+                className="flex w-full items-center gap-3 px-4 py-3 text-sm text-gray-600 hover:bg-gray-50 dark:text-slate-300 dark:hover:bg-slate-800"
               >
-                <ArrowUp className="h-4 w-4 text-gray-500" />
-                តូចទៅធំ
+                <ArrowUp className="h-4 w-4 text-gray-500 dark:text-slate-400" />
+                {S.expenses.sortAsc}
               </button>
               <button
                 type="button"
                 onClick={() => handleSortExpenseColumn('desc')}
-                className="flex w-full items-center gap-3 px-4 py-3 text-sm text-gray-600 hover:bg-gray-50"
+                className="flex w-full items-center gap-3 px-4 py-3 text-sm text-gray-600 hover:bg-gray-50 dark:text-slate-300 dark:hover:bg-slate-800"
               >
-                <ArrowDown className="h-4 w-4 text-gray-500" />
-                ធំទៅតូច
+                <ArrowDown className="h-4 w-4 text-gray-500 dark:text-slate-400" />
+                {S.expenses.sortDesc}
               </button>
-              <div className="mx-4 border-t border-gray-200" />
+              <div className="mx-4 border-t border-gray-200 dark:border-slate-700" />
               <button
                 type="button"
                 onClick={handleHideExpenseColumn}
-                className="flex w-full items-center gap-3 px-4 py-3 text-sm text-gray-600 hover:bg-gray-50"
+                className="flex w-full items-center gap-3 px-4 py-3 text-sm text-gray-600 hover:bg-gray-50 dark:text-slate-300 dark:hover:bg-slate-800"
               >
-                <EyeOff className="h-4 w-4 text-gray-500" />
-                លាក់
+                <EyeOff className="h-4 w-4 text-gray-500 dark:text-slate-400" />
+                {S.expenses.hideColumn}
               </button>
             </div>,
             document.body,
@@ -5204,9 +5508,9 @@ function EventDetailPage() {
               >
                 <div className="mb-5 flex items-start justify-between gap-4">
                   <div>
-                    <h3 className="font-moul text-2xl text-gray-900">បញ្ចូលបញ្ជី</h3>
+                    <h3 className="font-moul text-2xl text-gray-900">{S.expenses.importTitle}</h3>
                     <p className="mt-1 text-sm text-gray-500">
-                      ផ្ទុកឡើងឯកសារ Excel ដើម្បីនាំចូលចំណាយ។ ទាញយកគំរូសម្រាប់ទម្រង់ត្រឹមត្រូវ។
+                      {S.expenses.importSubtitle}
                     </p>
                   </div>
                   <button
@@ -5224,7 +5528,7 @@ function EventDetailPage() {
                       <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-blue-600">
                         <FileText className="h-5 w-5" />
                       </span>
-                      <p className="text-sm font-semibold text-gray-700">ត្រូវការគំរូ Excel?</p>
+                      <p className="text-sm font-semibold text-gray-700">{S.expenses.needSample}</p>
                     </div>
                     <button
                       type="button"
@@ -5232,7 +5536,7 @@ function EventDetailPage() {
                       className="inline-flex items-center gap-2 rounded-full border border-[#E38E98] bg-white px-4 py-2 text-sm font-semibold text-[#C52133] hover:bg-rose-50"
                     >
                       <Download className="h-4 w-4" />
-                      ទាញយក
+                      {S.expenses.downloadShort}
                     </button>
                   </div>
                 </div>
@@ -5253,8 +5557,8 @@ function EventDetailPage() {
                   <span className="flex h-16 w-16 items-center justify-center rounded-full bg-rose-50 text-[#C52133]">
                     <Upload className="h-7 w-7" />
                   </span>
-                  <p className="text-base font-semibold text-gray-900">ទម្លាក់ឯកសារ Excel របស់អ្នកនៅទីនេះ</p>
-                  <p className="text-sm text-gray-500">ឬចុចដើម្បីរុករកមើល (.xlsx, .xls)</p>
+                  <p className="text-base font-semibold text-gray-900">{S.expenses.dropTitle}</p>
+                  <p className="text-sm text-gray-500">{S.expenses.dropHint}</p>
                   {expenseImportFileName && (
                     <p className="text-sm font-medium text-gray-600">{expenseImportFileName}</p>
                   )}
@@ -5283,9 +5587,9 @@ function EventDetailPage() {
 
                 <div className="mt-5 flex-1 overflow-y-auto rounded-2xl border border-gray-100 bg-gray-50 p-4">
                   {isParsingExpenseFile ? (
-                    <p className="text-sm text-gray-500">កំពុងអានឯកសារ...</p>
+                    <p className="text-sm text-gray-500">{S.expenses.parsingFile}</p>
                   ) : expenseImportPreview.length === 0 ? (
-                    <p className="text-sm text-gray-500">មិនទាន់មានទិន្នន័យសម្រាប់ពិនិត្យ។</p>
+                    <p className="text-sm text-gray-500">{S.expenses.previewEmpty}</p>
                   ) : (
                     <div className="space-y-4">
                       {expenseImportPreview.map((expense) => (
@@ -5293,10 +5597,12 @@ function EventDetailPage() {
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <div>
                               <p className="text-sm font-semibold text-gray-900">{expense.name}</p>
-                              <p className="text-xs text-gray-500">គ្រោងចំណាយ: ${expense.budget.toFixed(2)}</p>
+                              <p className="text-xs text-gray-500">
+                                {S.expenses.budgetLine}: ${expense.budget.toFixed(2)}
+                              </p>
                             </div>
                             <span className="rounded-full bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700">
-                              {expense.payments.length} ការបង់ប្រាក់
+                              {expense.payments.length} {S.expenses.paymentEntries}
                             </span>
                           </div>
                           {expense.note && <p className="mt-2 text-xs text-gray-500">{expense.note}</p>}
@@ -5327,20 +5633,19 @@ function EventDetailPage() {
                     className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-gray-100 px-5 py-2 text-sm text-gray-700 hover:bg-gray-200"
                   >
                     <X className="h-4 w-4" />
-                    បោះបង់
+                    {S.guests.cancel}
                   </button>
                   <button
                     type="button"
                     onClick={handleImportExpenses}
                     disabled={isImportingExpenses || expenseImportPreview.length === 0 || isParsingExpenseFile}
-                    className={`inline-flex items-center gap-2 rounded-full px-5 py-2 text-sm text-white transition-colors ${
-                      !isImportingExpenses && expenseImportPreview.length > 0 && !isParsingExpenseFile
-                        ? 'bg-[#E38E98] hover:bg-[#d87984]'
-                        : 'cursor-not-allowed bg-gray-300 text-gray-500'
-                    }`}
+                    className={`inline-flex items-center gap-2 rounded-full px-5 py-2 text-sm text-white transition-colors ${!isImportingExpenses && expenseImportPreview.length > 0 && !isParsingExpenseFile
+                      ? 'bg-[#E38E98] hover:bg-[#d87984]'
+                      : 'cursor-not-allowed bg-gray-300 text-gray-500'
+                      }`}
                   >
                     <ArrowUp className="h-4 w-4" />
-                    {isImportingExpenses ? 'កំពុងនាំចូល...' : 'បញ្ចូល'}
+                    {isImportingExpenses ? S.expenses.importing : S.expenses.importBtn}
                   </button>
                 </div>
               </motion.div>
@@ -5368,9 +5673,9 @@ function EventDetailPage() {
                 <div className="mb-5 flex items-center justify-between">
                   <div>
                     <h3 className="font-khmer-heading text-2xl text-gray-900">
-                      {editingExpenseId ? 'កែសម្រួលចំណាយ' : 'បន្ថែមចំណាយថ្មី'}
+                      {editingExpenseId ? S.expenses.modalEditTitle : S.expenses.modalAddTitle}
                     </h3>
-                    <p className="mt-1 text-sm text-gray-500">បំពេញព័ត៌មានចំណាយខាងក្រោម</p>
+                    <p className="mt-1 text-sm text-gray-500">{S.expenses.modalHint}</p>
                   </div>
                   <button
                     type="button"
@@ -5400,9 +5705,9 @@ function EventDetailPage() {
                         });
                         const mapped = mapExpenseToRow(updated);
                         setExpenseRows((prev) => prev.map((row) => (row.id === editingExpenseId ? mapped : row)));
-                        setSuccess('បានកែប្រែចំណាយរួចរាល់');
+                        setSuccess(S.expenses.expenseUpdateOk);
                       } else {
-                        const confirmed = window.confirm('តើអ្នកចង់បង្កើតចំណាយថ្មីមែនទេ?');
+                        const confirmed = await requestConfirmation(S.expenses.confirmNewExpense);
                         if (!confirmed) return;
 
                         const created = await apiClient.createExpense(eventId, {
@@ -5413,7 +5718,7 @@ function EventDetailPage() {
                         });
                         const mapped = mapExpenseToRow(created);
                         setExpenseRows((prev) => [mapped, ...prev]);
-                        setSuccess('បានបន្ថែមចំណាយថ្មីរួចរាល់');
+                        setSuccess(S.expenses.expenseAddOk);
                       }
 
                       setError('');
@@ -5425,7 +5730,7 @@ function EventDetailPage() {
                       setIsExpenseModalOpen(false);
                     } catch (saveError) {
                       setSuccess('');
-                      setError(extractApiErrorMessage(saveError) || 'មិនអាចរក្សាទុកចំណាយបានទេ');
+                      setError(extractApiErrorMessage(saveError) || S.expenses.expenseSaveFail);
                     }
                   }}
                   className="flex-1 space-y-4 overflow-y-auto pr-1"
@@ -5433,19 +5738,20 @@ function EventDetailPage() {
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                     <div className="space-y-1.5">
                       <label className="text-sm text-gray-700">
-                        ឈ្មោះ<RequiredStar />
+                        {S.expenses.nameRequired}
+                        <RequiredStar />
                       </label>
                       <Input
                         value={expenseName}
                         onChange={(event) => setExpenseName(event.target.value)}
-                        placeholder="បញ្ចូលឈ្មោះ"
+                        placeholder={S.expenses.namePh}
                         className="h-11 rounded-xl border-gray-200"
                       />
                     </div>
 
                     <div className="space-y-1.5">
                       <label className="text-sm text-gray-700">
-                        គ្រោងចំណាយ <RequiredStar />
+                        {S.expenses.budgetRequired} <RequiredStar />
                       </label>
                       <div className="flex h-12 items-center rounded-xl border border-gray-200 bg-white px-3">
                         <span className="mr-2 text-lg font-semibold text-sky-500">$</span>
@@ -5456,38 +5762,38 @@ function EventDetailPage() {
                           onPaste={handleExpenseBudgetPaste}
                           className="w-full border-0 bg-transparent text-lg text-sky-600 outline-none placeholder:text-sky-400"
                           inputMode="decimal"
-                          placeholder="បញ្ចូលចំនួន"
+                          placeholder={S.expenses.amountPh}
                         />
                       </div>
                     </div>
 
                     <div className="space-y-1.5 md:col-span-2">
-                      <label className="text-sm text-gray-500">កំណត់ចំណាំ (មិនចាំបាច់)</label>
+                      <label className="text-sm text-gray-500">{S.expenses.noteOptional}</label>
                       <textarea
                         value={expenseNote}
                         onChange={(event) => setExpenseNote(event.target.value)}
                         rows={3}
                         className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:border-gray-300"
-                        placeholder="បញ្ចូលកំណត់ចំណាំ"
+                        placeholder={S.guests.notePh}
                       />
                     </div>
                   </div>
 
                   <div className="rounded-2xl border border-gray-100 bg-gray-50 p-4">
                     <div className="flex items-center justify-between">
-                      <p className="text-sm font-medium text-gray-700">ការបង់ប្រាក់</p>
+                      <p className="text-sm font-medium text-gray-700">{S.expenses.paymentsSection}</p>
                       <button
                         type="button"
                         onClick={addExpensePayment}
                         className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-white px-3 py-1 text-xs text-gray-600 hover:bg-gray-50"
                       >
                         <Plus className="h-3.5 w-3.5" />
-                        បន្ថែមការបង់ប្រាក់
+                        {S.expenses.addPayment}
                       </button>
                     </div>
                     {expensePayments.length === 0 ? (
                       <div className="mt-3 flex min-h-[120px] items-center justify-center rounded-2xl border border-gray-200 bg-white px-6 text-center text-sm text-gray-500">
-                        មិនទាន់មានការបង់ប្រាក់។ ចុច 'បន្ថែមការបង់ប្រាក់' ដើម្បីចាប់ផ្តើម។
+                        {S.expenses.noPaymentsHint}
                       </div>
                     ) : (
                       <div className="mt-3 space-y-3">
@@ -5512,7 +5818,7 @@ function EventDetailPage() {
                                   </button>
                                   <div>
                                     <p className="text-sm font-semibold text-gray-800">
-                                      {payment.description.trim() || `Payment #${index + 1}`}
+                                      {payment.description.trim() || `${S.expenses.paymentFallback} #${index + 1}`}
                                     </p>
                                     <p className="text-xs text-gray-500">{payment.date}</p>
                                   </div>
@@ -5530,28 +5836,28 @@ function EventDetailPage() {
                                 <div className="space-y-4 px-4 py-4">
                                   <div className="space-y-1.5">
                                     <label className="text-sm text-gray-700">
-                                      ការបង់ប្រាក់សម្រាប់<RequiredStar />
+                                      {S.expenses.payForLabel}
+                                      <RequiredStar />
                                     </label>
                                     <Input
                                       value={payment.description}
                                       onChange={(event) =>
                                         updateExpensePayment(payment.id, { description: event.target.value })
                                       }
-                                      placeholder="បញ្ចូលព័ត៌មានបរិយាយការបង់ប្រាក់"
-                                      className={`h-11 rounded-xl ${
-                                        isDescriptionEmpty ? 'border-red-400 focus-visible:border-red-500' : 'border-gray-200'
-                                      }`}
+                                      placeholder={S.expenses.payDescriptionPh}
+                                      className={`h-11 rounded-xl ${isDescriptionEmpty ? 'border-red-400 focus-visible:border-red-500' : 'border-gray-200'
+                                        }`}
                                     />
                                   </div>
 
                                   <div className="space-y-1.5">
                                     <label className="text-sm text-gray-700">
-                                      ចំនួនប្រាក់<RequiredStar />
+                                      {S.expenses.payAmountLabel}
+                                      <RequiredStar />
                                     </label>
                                     <div
-                                      className={`flex h-12 items-center rounded-xl border px-3 ${
-                                        isAmountEmpty ? 'border-red-400' : 'border-gray-200'
-                                      }`}
+                                      className={`flex h-12 items-center rounded-xl border px-3 ${isAmountEmpty ? 'border-red-400' : 'border-gray-200'
+                                        }`}
                                     >
                                       <span className="mr-2 text-lg font-semibold text-sky-500">$</span>
                                       <input
@@ -5571,13 +5877,13 @@ function EventDetailPage() {
                                   </div>
 
                                   <div className="space-y-1.5">
-                                    <label className="text-sm text-gray-500">កំណត់ចំណាំ (មិនចាំបាច់)</label>
+                                    <label className="text-sm text-gray-500">{S.expenses.payNoteOptional}</label>
                                     <textarea
                                       value={payment.note}
                                       onChange={(event) => updateExpensePayment(payment.id, { note: event.target.value })}
                                       rows={3}
                                       className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:border-gray-300"
-                                      placeholder="កំណត់ចំណាំការបង់ប្រាក់ (ប្រសិនបើមាន)"
+                                      placeholder={S.expenses.payNotePh}
                                     />
                                   </div>
                                 </div>
@@ -5587,7 +5893,7 @@ function EventDetailPage() {
                         })}
 
                         <div className="flex justify-end text-sm font-medium text-gray-700">
-                          ចំនួនការបង់ប្រាក់សរុប: ${formatPaymentTotal(paymentTotal)}
+                          {S.expenses.paymentTotalLabel}: ${formatPaymentTotal(paymentTotal)}
                         </div>
                       </div>
                     )}
@@ -5600,19 +5906,18 @@ function EventDetailPage() {
                       className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-gray-100 px-5 py-2 text-sm text-gray-700 hover:bg-gray-200"
                     >
                       <X className="h-4 w-4" />
-                      បោះបង់
+                      {S.guests.cancel}
                     </button>
                     <button
                       type="submit"
                       disabled={!isExpenseFormReady}
-                      className={`inline-flex items-center gap-2 rounded-full px-5 py-2 text-sm text-white transition-colors ${
-                        isExpenseFormReady
-                          ? 'bg-[#C52133] hover:bg-[#aa1b2a]'
-                          : 'cursor-not-allowed bg-gray-300 text-gray-500'
-                      }`}
+                      className={`inline-flex items-center gap-2 rounded-full px-5 py-2 text-sm text-white transition-colors ${isExpenseFormReady
+                        ? 'bg-[#C52133] hover:bg-[#aa1b2a]'
+                        : 'cursor-not-allowed bg-gray-300 text-gray-500'
+                        }`}
                     >
                       <Check className="h-4 w-4" />
-                      {editingExpenseId ? 'រក្សាទុកការផ្លាស់ប្ដូរ' : 'បង្កើតថ្មី'}
+                      {editingExpenseId ? S.expenses.expenseSaveBtn : S.guests.create}
                     </button>
                   </div>
                 </form>
@@ -5642,8 +5947,6 @@ function EventDetailPage() {
         return renderMyTemplateTab();
       case 'template-shop':
         return renderTemplateShopTab();
-      case 'qr':
-        return renderQrTab();
       default:
         return renderGeneralTab();
     }
@@ -5651,10 +5954,21 @@ function EventDetailPage() {
 
   if (isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center font-khmer-body">
+      <div className="flex min-h-screen items-center justify-center bg-white px-6 font-khmer-body">
         <div className="text-center">
-          <div className="inline-block h-12 w-12 animate-spin rounded-full border-b-2 border-red-600" />
-          <p className="mt-4 text-gray-600">កំពុងទាញយកទិន្នន័យ...</p>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={Assets.loadingMascot}
+            alt="Loading mascot"
+            className="mx-auto h-44 w-auto object-contain sm:h-52"
+          />
+          <span className="loader mt-4" aria-hidden="true" />
+          <p className="mt-5 font-khmer-heading text-4xl text-slate-900 sm:text-5xl">
+            {S.layout.loadingTitle}
+          </p>
+          <p className="mt-3 text-sm text-slate-500 sm:text-base">
+            {S.layout.loadingSub}
+          </p>
         </div>
       </div>
     );
@@ -5664,9 +5978,9 @@ function EventDetailPage() {
     return (
       <div className="flex min-h-screen items-center justify-center font-khmer-body">
         <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900">រកមិនឃើញព្រឹត្តិការណ៍</h1>
+          <h1 className="text-2xl font-bold text-gray-900">{S.layout.notFoundTitle}</h1>
           <Link href="/dashboard" className="mt-4 inline-block text-red-600">
-            ត្រឡប់ទៅផ្ទាំងគ្រប់គ្រង
+            {S.layout.notFoundLink}
           </Link>
         </div>
       </div>
@@ -5674,72 +5988,185 @@ function EventDetailPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 font-khmer-body">
-      <header className="border-b border-gray-100 bg-white">
+    <div className="min-h-screen bg-gray-50 font-khmer-body dark:bg-slate-950 dark:text-slate-100">
+      <header className="border-b border-gray-100 bg-white dark:border-slate-800 dark:bg-slate-900">
         <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
           <Link href="/dashboard">
-            <Button variant="outline" className="mb-4 border-gray-200">
+            <Button variant="outline" className="mb-4 border-gray-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800">
               <ArrowLeft className="mr-2 h-4 w-4" />
-              ត្រឡប់
+              {S.layout.back}
             </Button>
           </Link>
 
           <div className="flex items-start justify-between gap-4">
-            <h1 className="font-khmer-heading text-2xl font-bold text-gray-900 sm:text-3xl">
+            <h1 className="font-khmer-body text-[1.7rem] font-semibold leading-[1.2] tracking-tight text-gray-900 dark:text-slate-100 sm:font-khmer-heading sm:text-3xl sm:leading-tight">
               {event.title}
             </h1>
-            <Link
-              href={externalPreviewPath}
-              target="_blank"
-              className="rounded-md p-2 text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900"
-              aria-label="View public invitation"
-            >
-              <ExternalLink className="h-5 w-5" />
-            </Link>
+            <div className="flex items-center gap-2">
+              <DashboardLanguageThemeControls />
+              <Link
+                href={externalPreviewPath}
+                target="_blank"
+                className="rounded-md p-2 text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+                aria-label={S.layout.viewInvitationAria}
+              >
+                <ExternalLink className="h-5 w-5" />
+              </Link>
+            </div>
           </div>
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
-        <div className="mb-6 overflow-x-auto">
-          <nav className="flex min-w-max items-center gap-6 border-b border-gray-200">
-            {tabs.map((tab) => {
-              const Icon = tab.icon;
-              const isActive = activeTab === tab.id;
+      <main className="mx-auto max-w-6xl px-4 pt-4 pb-8 sm:px-6 lg:px-8">
+        {/*
+          Change this to 'minimal' if you want monochrome tabs.
+          Available presets: 'glass' | 'minimal'
+        */}
+        {(() => {
+          const tabStylePreset: 'glass' | 'minimal' = 'glass';
+          const navClassName =
+            tabStylePreset === 'glass'
+              ? 'relative inline-flex min-w-max items-center gap-2 overflow-hidden rounded-2xl border border-white/60 bg-white/50 p-2 shadow-lg shadow-slate-900/5 backdrop-blur-xl dark:border-slate-700/80 dark:bg-slate-900/95'
+              : 'inline-flex min-w-max items-center gap-2 rounded-2xl border border-gray-200 bg-white p-2 dark:border-slate-700 dark:bg-slate-900';
+          const activeTabClassName =
+            tabStylePreset === 'glass'
+              ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/25 ring-1 ring-emerald-300/50 dark:bg-emerald-500 dark:text-white'
+              : 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900';
+          const inactiveTabClassName =
+            tabStylePreset === 'glass'
+              ? 'text-slate-600 hover:bg-white/70 hover:text-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 dark:hover:text-white'
+              : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white';
+          const activeIconClassName = tabStylePreset === 'glass' ? 'h-4 w-4 text-white' : 'h-4 w-4 text-white dark:text-slate-900';
+          const inactiveIconClassName =
+            tabStylePreset === 'glass' ? 'h-4 w-4 text-slate-500 dark:text-slate-300' : 'h-4 w-4 text-gray-500 dark:text-slate-400';
 
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => {
-                    setError('');
-                    setSuccess('');
-                    setActiveTab(tab.id);
-                  }}
-                  className={`inline-flex items-center gap-2 whitespace-nowrap border-b-2 pb-3 text-sm font-medium ${
-                    isActive
-                      ? 'border-red-600 text-red-600'
-                      : 'border-transparent text-gray-600 hover:text-gray-900'
-                  }`}
-                >
-                  <Icon className="h-4 w-4" />
-                  {tab.label}
-                </button>
-              );
-            })}
-          </nav>
-        </div>
+          return (
+            <div className="mb-6 overflow-x-auto">
+              <nav
+                className={navClassName}
+                onMouseEnter={() => setIsTabNavHovered(true)}
+                onMouseLeave={() => setIsTabNavHovered(false)}
+                onMouseMove={handleTabNavMouseMove}
+              >
+                {tabStylePreset === 'glass' && (
+                  <motion.div
+                    aria-hidden="true"
+                    className="pointer-events-none absolute left-0 top-0 h-60 w-60 rounded-full bg-gradient-to-br from-white/70 via-emerald-200/45 to-lime-200/35 blur-3xl dark:from-emerald-500/20 dark:via-cyan-500/15 dark:to-slate-500/20"
+                    style={{
+                      x: tabNavGlowSmoothX,
+                      y: tabNavGlowSmoothY,
+                      opacity: isTabNavHovered ? 1 : 0,
+                    }}
+                    transition={{ duration: 0.22, ease: 'easeOut' }}
+                  />
+                )}
+                {tabs.map((tab) => {
+                  const Icon = tab.icon;
+                  const isActive = activeTab === tab.id;
 
-        {error && (
-          <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>
-        )}
+                  return (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => {
+                        setError('');
+                        setSuccess('');
+                        setActiveTab(tab.id);
+                        updateEventPageQuery({
+                          tab: tab.id,
+                          page: tab.id === 'guests' ? String(guestPage) : null,
+                        });
+                      }}
+                      className={`inline-flex items-center gap-2 whitespace-nowrap rounded-xl px-4 py-2.5 transition-all duration-200 ${isActive
+                        ? 'scale-[1.03] text-sm font-semibold'
+                        : 'text-sm font-medium'
+                        } ${isActive
+                          ? activeTabClassName
+                          : inactiveTabClassName
+                        }`}
+                    >
+                      <Icon className={isActive ? activeIconClassName : inactiveIconClassName} />
+                      {tab.label}
+                    </button>
+                  );
+                })}
+              </nav>
+            </div>
+          );
+        })()}
 
-        {success && (
-          <div className="mb-4 rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-700">{success}</div>
+        {(error || success) && (
+          <div ref={feedbackRef}>
+            <MessageCard
+              text={error || success}
+              tone={error ? 'error' : 'success'}
+              onClose={() => {
+                setError('');
+                setSuccess('');
+              }}
+              className="mb-4 p-4"
+            />
+          </div>
         )}
 
         {renderTabContent()}
       </main>
+
+      <AnimatePresence>
+        {confirmDialog.isOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[150] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
+            onClick={() => {
+              confirmDialog.resolve?.(false);
+              setConfirmDialog({ isOpen: false, message: '' });
+            }}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 10, scale: 0.97 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 8, scale: 0.97 }}
+              transition={{ duration: 0.2 }}
+              className="w-full max-w-md rounded-3xl border border-gray-100 bg-white p-6 shadow-2xl"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="flex items-start gap-3">
+                <div className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-amber-100 text-amber-700">
+                  <Info className="h-5 w-5" />
+                </div>
+                <p className="pt-1 text-sm text-gray-700">{confirmDialog.message}</p>
+              </div>
+
+              <div className="mt-6 flex justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="border-gray-200 text-gray-700 hover:bg-gray-50"
+                  onClick={() => {
+                    confirmDialog.resolve?.(false);
+                    setConfirmDialog({ isOpen: false, message: '' });
+                  }}
+                >
+                  {S.guests.cancel}
+                </Button>
+                <Button
+                  type="button"
+                  className="bg-[#C52133] text-white hover:bg-[#aa1b2a]"
+                  onClick={() => {
+                    confirmDialog.resolve?.(true);
+                    setConfirmDialog({ isOpen: false, message: '' });
+                  }}
+                >
+                  {S.notices.confirmAction}
+                </Button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      <SupportContactFab />
     </div>
   );
 }

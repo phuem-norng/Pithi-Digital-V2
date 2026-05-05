@@ -5,8 +5,6 @@ import { Label } from '@/components/ui/label';
 import type { BuilderState } from '../types';
 
 type EventInfoSectionProps = {
-  eventTitle: string;
-  eventSubtitle: string;
   eventDate: string;
   eventEndDate: string;
   eventLocation: string;
@@ -15,8 +13,6 @@ type EventInfoSectionProps = {
 };
 
 export default function EventInfoSection({
-  eventTitle,
-  eventSubtitle,
   eventDate,
   eventEndDate,
   eventLocation,
@@ -27,22 +23,6 @@ export default function EventInfoSection({
   
   return (
     <div className="space-y-4">
-      <div className="space-y-2">
-        <Label>{isKm ? 'ចំណងជើងធំ' : 'Main Title'}</Label>
-        <Input
-          value={eventTitle}
-          onChange={(e) => onChange({ eventTitle: e.target.value })}
-          placeholder={isKm ? 'ឧ. សិរីមង្គលអាពាហ៍ពិពាហ៍' : 'Ex. Wedding Ceremony'}
-        />
-      </div>
-      <div className="space-y-2">
-        <Label>{isKm ? 'ចំណងជើងរង' : 'Subtitle'}</Label>
-        <Input
-          value={eventSubtitle}
-          onChange={(e) => onChange({ eventSubtitle: e.target.value })}
-          placeholder={isKm ? 'ឧ. សូមអញ្ជើញភ្ញៀវកិត្តិយស...' : 'Ex. You are warmly invited...'}
-        />
-      </div>
       <div className="space-y-2">
         <Label>{isKm ? 'កាលបរិច្ឆេទ និងម៉ោង' : 'Date & Time'}</Label>
         <Input

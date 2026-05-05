@@ -2,6 +2,10 @@ import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
+const DEFAULT_WEDDING_TEMPLATE_IMAGE =
+  'https://pub-93085525881746c1a7b523e463cbfb35.r2.dev/1776941595513-img_2539-566x850.jpeg';
+const FLORAL_ROSE_TEMPLATE_IMAGE =
+  'https://pub-93085525881746c1a7b523e463cbfb35.r2.dev/1777401615682-432012146_797776719062432_7949193257349104001_n.jpg';
 
 async function main() {
   console.log('🌱 Seeding database...');
@@ -35,10 +39,12 @@ async function main() {
     },
   });
 
-  const template = await prisma.template.create({
+  const classicTemplate = await prisma.template.create({
     data: {
       name: 'Classic Wedding Template',
       eventTypeId: eventType.id,
+      previewUrl: DEFAULT_WEDDING_TEMPLATE_IMAGE,
+      thumbnail: DEFAULT_WEDDING_TEMPLATE_IMAGE,
       config: {
         theme: 'classic',
         colors: {
@@ -49,7 +55,25 @@ async function main() {
     },
   });
 
-  console.log(`✅ Created template: ${template.name}`);
+  const floralTemplate = await prisma.template.create({
+    data: {
+      name: 'Floral Rose Wedding Template',
+      eventTypeId: eventType.id,
+      previewUrl: FLORAL_ROSE_TEMPLATE_IMAGE,
+      thumbnail: FLORAL_ROSE_TEMPLATE_IMAGE,
+      config: {
+        theme: 'floral-rose',
+        colors: {
+          primary: '#9f1239',
+          heading: '#9f1239',
+          text: '#7a2141',
+        },
+      },
+    },
+  });
+
+  console.log(`✅ Created template: ${classicTemplate.name}`);
+  console.log(`✅ Created template: ${floralTemplate.name}`);
 
   // Create a test event
   const event = await prisma.event.create({
@@ -61,7 +85,7 @@ async function main() {
       description: 'A beautiful wedding celebration',
       userId: user.id,
       eventTypeId: eventType.id,
-      templateId: template.id,
+      templateId: classicTemplate.id,
     },
   });
 

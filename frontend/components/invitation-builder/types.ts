@@ -20,6 +20,9 @@ export type MusicOption = {
 };
 
 export type BuilderState = {
+  styleVariant?: 'default' | 'floral-rose';
+  /** Catalog template id; used for template-specific cover layout only. */
+  templateId?: string;
   language: Language;
   musicEnabled: boolean;
   musicId: string;

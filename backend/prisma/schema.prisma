@@ -221,3 +221,27 @@ enum GiftCurrencyType {
   USD
   KHR
 }
+
+model Music {
+  id        String   @id @default(cuid())
+  name      String
+  url       String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("music")
+}
+
+model SupportLink {
+  id        String   @id @default(cuid())
+  label     String
+  url       String
+  platform  String?
+  isActive  Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive, sortOrder])
+  @@map("support_links")
+}

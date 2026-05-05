@@ -50,6 +50,15 @@ async function bootstrap() {
     }
   };
 
+  const isTryCloudflareOrigin = (origin: string) => {
+    try {
+      const { hostname } = new URL(origin);
+      return hostname.endsWith('.trycloudflare.com');
+    } catch {
+      return false;
+    }
+  };
+
   // ✅ Enable CORS (important for Next.js frontend)
   app.enableCors({
     origin: (origin, callback) => {
@@ -57,7 +66,8 @@ async function bootstrap() {
         !origin ||
         configuredOrigins.includes(origin) ||
         isLocalDevOrigin(origin) ||
-        (process.env.NODE_ENV !== 'production' && isPrivateNetworkOrigin(origin))
+        (process.env.NODE_ENV !== 'production' &&
+          (isPrivateNetworkOrigin(origin) || isTryCloudflareOrigin(origin)))
       ) {
         callback(null, true);
         return;
@@ -79,7 +89,7 @@ async function bootstrap() {
 
   // ✅ Port config and start server
   const port = process.env.PORT || 3001;
-  await app.listen(port);
+  await app.listen(port, '0.0.0.0');
   console.log(`🚀 Backend running on http://localhost:${port}`);
 }
 bootstrap();
