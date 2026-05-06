@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { Assets } from '@/lib/assets';
 
 interface Props {
   children: React.ReactNode;
@@ -22,7 +23,7 @@ async function fetchEvent(id: string) {
 
 /** Resolve cover image to an absolute URL Telegram/Facebook can crawl */
 function resolveImageUrl(coverImage?: string): string {
-  if (!coverImage) return `${APP_URL}/og-default.png`;
+  if (!coverImage) return Assets.mainThumbnail;
   if (coverImage.startsWith('http://') || coverImage.startsWith('https://')) return coverImage;
   return `${API_URL}${coverImage.startsWith('/') ? '' : '/'}${coverImage}`;
 }
