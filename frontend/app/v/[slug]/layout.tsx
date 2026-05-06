@@ -35,21 +35,21 @@ function buildOgTitle(event: { title?: string; metadata?: Record<string, unknown
   const groom = typeof meta.groomName === 'string' ? meta.groomName.trim() : '';
   const bride = typeof meta.brideName === 'string' ? meta.brideName.trim() : '';
 
-  if (groom && bride) return `${groom} & ${bride} - Pithi Digital`;
-  if (groom || bride) return `${groom || bride} - Pithi Digital`;
+  if (groom && bride) return `Online Invitation - ${groom} & ${bride} | Pithi Digital`;
+  if (groom || bride) return `Online Invitation - ${groom || bride} | Pithi Digital`;
 
   // Fall back to splitting the title the same way DigitalInvitation does
   const t = event.title || '';
   if (t.includes(' និង ')) {
     const [g, b] = t.split(' និង ').map((s) => s.trim());
-    if (g && b) return `${g} & ${b} - Pithi Digital`;
+    if (g && b) return `Online Invitation - ${g} & ${b} | Pithi Digital`;
   }
   if (t.includes('&')) {
     const [g, b] = t.split('&').map((s) => s.trim());
-    if (g && b) return `${g} & ${b} - Pithi Digital`;
+    if (g && b) return `Online Invitation - ${g} & ${b} | Pithi Digital`;
   }
 
-  return t ? `${t} - Pithi Digital` : 'លិខិតអញ្ជើញ | Pithi Digital';
+  return t ? `Online Invitation - ${t} | Pithi Digital` : 'Online Invitation | Pithi Digital';
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
@@ -72,7 +72,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       })
     : '';
   const location = event.location || '';
-  const description = [date, location].filter(Boolean).join(' · ') || 'មើលលិខិតអញ្ជើញរបស់អ្នក';
+  const description =
+    [date, location].filter(Boolean).join(' · ') ||
+    'ធៀបអញ្ជើញឌីជីថលស្រស់ស្អាត អាចមើល និងឆ្លើយ RSVP បានភ្លាមៗ';
   const image = resolveImageUrl(event.coverImage);
   const url = `${APP_URL}/v/${slug}`;
 

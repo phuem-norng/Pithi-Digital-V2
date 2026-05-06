@@ -32,8 +32,8 @@ const moul = Moul({
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://pithi-digital-v1.vercel.app';
 
 export const metadata: Metadata = {
-  title: 'Pithi Digital - វេទិកាបង្កើតធៀបការឌីជីថលដ៏ទំនើប',
-  description: 'រៀបចំពិធីមង្គលការរបស់អ្នកឱ្យកាន់តែពិសេស ជាមួយធៀបឌីជីថល គ្រប់គ្រងភ្ញៀវ និង RSVP ងាយស្រួល។',
+  title: 'Online Invitation - Pithi Digital',
+  description: 'ធៀបអញ្ជើញឌីជីថលទំនើប សម្រាប់បង្កើតកម្មវិធី ចែករំលែកទៅភ្ញៀវ និងគ្រប់គ្រង RSVP ងាយស្រួល។',
   keywords: 'invitations, events, RSVP, digital, ធៀបការ, ពិធីមង្គលការ, Cambodia',
   metadataBase: new URL(APP_URL),
   icons: {
@@ -47,8 +47,8 @@ export const metadata: Metadata = {
     ],
   },
   openGraph: {
-    title: 'Pithi Digital - វេទិកាបង្កើតធៀបការឌីជីថលដ៏ទំនើប',
-    description: 'រៀបចំពិធីមង្គលការរបស់អ្នកឱ្យកាន់តែពិសេស ជាមួយធៀបឌីជីថល គ្រប់គ្រងភ្ញៀវ និង RSVP ងាយស្រួល។',
+    title: 'Online Invitation - Pithi Digital',
+    description: 'ធៀបអញ្ជើញឌីជីថលទំនើប សម្រាប់បង្កើតកម្មវិធី ចែករំលែកទៅភ្ញៀវ និងគ្រប់គ្រង RSVP ងាយស្រួល។',
     url: APP_URL,
     siteName: 'Pithi Digital',
     images: [
@@ -64,8 +64,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Pithi Digital - វេទិកាបង្កើតធៀបការឌីជីថលដ៏ទំនើប',
-    description: 'រៀបចំពិធីមង្គលការរបស់អ្នកឱ្យកាន់តែពិសេស ជាមួយធៀបឌីជីថល គ្រប់គ្រងភ្ញៀវ និង RSVP ងាយស្រួល។',
+    title: 'Online Invitation - Pithi Digital',
+    description: 'ធៀបអញ្ជើញឌីជីថលទំនើប សម្រាប់បង្កើតកម្មវិធី ចែករំលែកទៅភ្ញៀវ និងគ្រប់គ្រង RSVP ងាយស្រួល។',
     images: [Assets.mainThumbnail],
   },
 };
