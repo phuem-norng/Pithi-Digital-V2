@@ -21,7 +21,7 @@ A modern, production-ready digital invitation platform for Cambodian users to cr
 | **Styling**        | Tailwind CSS + shadcn/ui                |
 | **Authentication** | JWT                                     |
 | **Storage**        | Cloudinary                              |
-| **Deployment**     | Vercel (Frontend) / Railway (Backend)   |
+| **Deployment**     | Vercel (Frontend) / Render (Backend)   |
 
 ---
 
