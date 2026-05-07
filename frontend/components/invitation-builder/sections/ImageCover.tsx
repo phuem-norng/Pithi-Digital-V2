@@ -297,19 +297,19 @@ export default function ImageCover({ data }: ImageCoverProps) {
 
 				<button
 					type="button"
-					className="relative top-20 mt-4 px-1 py-0 font-khmer-heading text-base font-medium tracking-wide text-current sm:text-lg"
+					className="relative top-17 mt-2.5 px-1 py-0 font-khmer-heading text-sm font-medium leading-snug tracking-wide text-current sm:top-20 sm:mt-4 sm:text-lg"
 					style={isFloralRoseShowcaseCover ? { color: showcaseGold.main, textShadow: showcaseGold.shadow } : undefined}
 				>
 					{invitationText}
 				</button>
 
-				<div className="relative -mt-16 flex flex-col items-center justify-center">
+				<div className="relative -mt-15 flex flex-col items-center justify-center sm:-mt-16">
 					<img src={Assets.guestNameFrame} alt="" aria-hidden="true" className="h-auto w-64 object-contain sm:w-72" />
 					<div
-						className="absolute translate-y-1.5 rounded-full px-4 py-1.5 font-khmer-heading text-base font-semibold whitespace-nowrap sm:translate-y-2 sm:text-lg"
+						className="absolute max-w-[82%] translate-y-1 rounded-full px-3 py-1 font-khmer-heading text-sm font-semibold leading-tight sm:max-w-none sm:translate-y-2 sm:px-4 sm:py-1.5 sm:text-lg"
 						style={isFloralRoseShowcaseCover ? { color: showcaseGold.main, textShadow: showcaseGold.shadow } : undefined}
 					>
-						<span>{guestName}</span>
+						<span className="block truncate">{guestName}</span>
 					</div>
 				</div>
 
