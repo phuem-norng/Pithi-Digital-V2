@@ -4702,14 +4702,14 @@ function EventDetailPage() {
 
             return (
               <div key={template.id} className="overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
-                <div className="relative bg-gray-50 p-4 dark:bg-slate-800">
+                  <div className="relative p-4">
                   <div className="relative aspect-[2/3] w-full overflow-hidden rounded-2xl shadow-sm">
-                    <div className="absolute inset-0 overflow-hidden bg-[#f7f1e8]">
+                    <div className="absolute inset-0 overflow-hidden">
                       {coverPreviewData ? (
-                        <div className="pointer-events-none absolute left-1/2 top-0 w-[28rem] max-w-[200%] -translate-x-1/2 origin-top scale-[0.56] sm:scale-[0.6] md:scale-[0.58] xl:scale-[0.64]">
+                        <div className="pointer-events-none absolute left-1/2 top-0 w-[28rem] max-w-[200%] -translate-x-1/2 origin-top scale-[0.82] sm:scale-[0.84] md:scale-[0.8] xl:scale-[0.74]">
                           <Suspense
                             fallback={
-                              <div className="flex h-160 w-full items-center justify-center bg-[#f7f1e8] dark:bg-slate-900">
+                              <div className="flex h-160 w-full items-center justify-center">
                                 <span className="text-xs text-gray-400 dark:text-slate-500">...</span>
                               </div>
                             }
@@ -4865,13 +4865,13 @@ function EventDetailPage() {
 
               return (
                 <div key={template.id} className="overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
-                  <div className="relative bg-gray-50 p-4 dark:bg-slate-800">
+                  <div className="relative p-4">
                     <div className="relative aspect-[2/3] w-full overflow-hidden rounded-2xl shadow-sm">
-                      <div className="absolute inset-0 overflow-hidden bg-[#f7f1e8]">
-                        <div className="pointer-events-none absolute left-1/2 top-0 w-[28rem] max-w-[200%] -translate-x-1/2 origin-top scale-[0.56] sm:scale-[0.6] md:scale-[0.58] xl:scale-[0.64]">
+                      <div className="absolute inset-0 overflow-hidden">
+                        <div className="pointer-events-none absolute left-1/2 top-0 w-[28rem] max-w-[200%] -translate-x-1/2 origin-top scale-[0.82] sm:scale-[0.84] md:scale-[0.8] xl:scale-[0.74]">
                           <Suspense
                             fallback={
-                              <div className="flex h-160 w-full items-center justify-center bg-[#f7f1e8] dark:bg-slate-900">
+                              <div className="flex h-160 w-full items-center justify-center">
                                 <span className="text-xs text-gray-400 dark:text-slate-500">…</span>
                               </div>
                             }
