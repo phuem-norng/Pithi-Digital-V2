@@ -341,6 +341,9 @@ function EventDetailPage() {
   const [accessToken, setAccessToken] = useState('');
   const [previewingTemplateId, setPreviewingTemplateId] = useState<string | null>(null);
   const [activatingMyTemplateId, setActivatingMyTemplateId] = useState<string | null>(null);
+  const [guestGreetingPreview, setGuestGreetingPreview] = useState<string | null>(null);
+  const [guestNotePreview, setGuestNotePreview] = useState<string | null>(null);
+  const [expenseDescriptionPreview, setExpenseDescriptionPreview] = useState<string | null>(null);
   const feedbackRef = useRef<HTMLDivElement | null>(null);
   const [isTabNavHovered, setIsTabNavHovered] = useState(false);
   const isEditFormInitialized = useRef(false);
@@ -2499,8 +2502,40 @@ function EventDetailPage() {
                             {statusMeta.label}
                           </span>
                         </td>
-                        <td className="px-6 py-4 text-gray-700 whitespace-nowrap dark:text-slate-300">{guest.greetingMessage}</td>
-                        <td className="px-6 py-4 text-gray-700 whitespace-nowrap dark:text-slate-300">{guest.note}</td>
+                        <td className="px-6 py-4 text-gray-700 dark:text-slate-300">
+                          {guest.greetingMessage?.trim() ? (
+                            <button
+                              type="button"
+                              onClick={() => setGuestGreetingPreview(guest.greetingMessage || '')}
+                              className="block max-w-[160px] cursor-pointer text-left text-sm text-gray-700 transition hover:text-emerald-700 dark:text-slate-300 dark:hover:text-emerald-300"
+                              title={isKhmer ? 'ចុចមើលសារពេញ' : 'Click to view full message'}
+                            >
+                              <span className="block min-w-0">
+                                {guest.greetingMessage.slice(0, 8)}
+                                {guest.greetingMessage.length > 8 ? '…' : ''}
+                              </span>
+                            </button>
+                          ) : (
+                            '-'
+                          )}
+                        </td>
+                        <td className="px-6 py-4 text-gray-700 dark:text-slate-300">
+                          {guest.note?.trim() ? (
+                            <button
+                              type="button"
+                              onClick={() => setGuestNotePreview(guest.note || '')}
+                              className="block max-w-[160px] cursor-pointer text-left text-sm text-gray-700 transition hover:text-emerald-700 dark:text-slate-300 dark:hover:text-emerald-300"
+                              title={isKhmer ? 'ចុចមើលចំណាំពេញ' : 'Click to view full note'}
+                            >
+                              <span className="block min-w-0">
+                                {guest.note.slice(0, 8)}
+                                {guest.note.length > 8 ? '…' : ''}
+                              </span>
+                            </button>
+                          ) : (
+                            '-'
+                          )}
+                        </td>
                         <td className="relative px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center justify-end gap-2">
                             <button
@@ -3393,7 +3428,21 @@ function EventDetailPage() {
                         {row.currencyType === 'USD' ? '$' : '៛'} {formatAmount(row.amount)}
                       </span>
                     </td>
-                    <td className="px-5 py-3 text-gray-700 dark:text-slate-300">{row.note || '-'}</td>
+                    <td className="px-5 py-3 text-gray-700 dark:text-slate-300">
+                      {row.note && row.note !== '-' ? (
+                        <button
+                          type="button"
+                          onClick={() => setGuestNotePreview(row.note || '')}
+                          className="block max-w-[160px] cursor-pointer text-left text-sm text-gray-700 transition hover:text-emerald-700 dark:text-slate-300 dark:hover:text-emerald-300"
+                          title={isKhmer ? 'ចុចមើលចំណាំពេញ' : 'Click to view full note'}
+                        >
+                          {row.note.slice(0, 8)}
+                          {row.note.length > 8 ? '…' : ''}
+                        </button>
+                      ) : (
+                        '-'
+                      )}
+                    </td>
                     <td className="px-5 py-3">
                       <div className="flex items-center justify-end gap-2">
                         <button
@@ -5388,9 +5437,15 @@ function EventDetailPage() {
                         )}
                         {visibleColumns.note && (
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="rounded-2xl border border-gray-100 bg-white px-4 py-3 text-sm text-gray-700 whitespace-nowrap dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
-                              {row.note}
-                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setExpenseDescriptionPreview(row.note || '')}
+                              className="rounded-2xl border border-gray-100 bg-white px-4 py-3 text-left text-sm text-gray-700 transition hover:text-emerald-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:text-emerald-300"
+                              title={isKhmer ? 'ចុចមើលការពិពណ៌នាពេញ' : 'Click to view full description'}
+                            >
+                              {row.note.slice(0, 8)}
+                              {row.note.length > 8 ? '…' : ''}
+                            </button>
                           </td>
                         )}
                         <td className="px-6 py-4 whitespace-nowrap">
@@ -6114,6 +6169,114 @@ function EventDetailPage() {
       </main>
 
       <AnimatePresence>
+        {guestGreetingPreview !== null && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[160] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
+            onClick={() => setGuestGreetingPreview(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 10, scale: 0.97 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 8, scale: 0.97 }}
+              transition={{ duration: 0.2 }}
+              className="w-full max-w-lg rounded-3xl border border-gray-100 bg-white p-6 shadow-2xl"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <h3 className="text-sm font-semibold text-gray-900">
+                  {isKhmer ? 'សារជូនពរពេញ' : 'Full message'}
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setGuestGreetingPreview(null)}
+                  className="rounded-full border border-gray-200 p-1 text-gray-500 transition hover:bg-gray-100 hover:text-gray-700"
+                  aria-label="Close message preview"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <p className="max-h-[55vh] overflow-y-auto whitespace-pre-wrap break-words rounded-2xl bg-gray-50 p-4 text-sm leading-relaxed text-gray-700">
+                {guestGreetingPreview}
+              </p>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {guestNotePreview !== null && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[160] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
+            onClick={() => setGuestNotePreview(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 10, scale: 0.97 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 8, scale: 0.97 }}
+              transition={{ duration: 0.2 }}
+              className="w-full max-w-lg rounded-3xl border border-gray-100 bg-white p-6 shadow-2xl"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <h3 className="text-sm font-semibold text-gray-900">
+                  {isKhmer ? 'កំណត់ចំណាំពេញ' : 'Full note'}
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setGuestNotePreview(null)}
+                  className="rounded-full border border-gray-200 p-1 text-gray-500 transition hover:bg-gray-100 hover:text-gray-700"
+                  aria-label="Close note preview"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <p className="max-h-[55vh] overflow-y-auto whitespace-pre-wrap break-words rounded-2xl bg-gray-50 p-4 text-sm leading-relaxed text-gray-700">
+                {guestNotePreview}
+              </p>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {expenseDescriptionPreview !== null && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[160] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
+            onClick={() => setExpenseDescriptionPreview(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 10, scale: 0.97 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 8, scale: 0.97 }}
+              transition={{ duration: 0.2 }}
+              className="w-full max-w-lg rounded-3xl border border-gray-100 bg-white p-6 shadow-2xl"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <h3 className="text-sm font-semibold text-gray-900">
+                  {isKhmer ? 'ការពិពណ៌នាពេញ' : 'Full description'}
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setExpenseDescriptionPreview(null)}
+                  className="rounded-full border border-gray-200 p-1 text-gray-500 transition hover:bg-gray-100 hover:text-gray-700"
+                  aria-label="Close description preview"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <p className="max-h-[55vh] overflow-y-auto whitespace-pre-wrap break-words rounded-2xl bg-gray-50 p-4 text-sm leading-relaxed text-gray-700">
+                {expenseDescriptionPreview}
+              </p>
+            </motion.div>
+          </motion.div>
+        )}
+
         {confirmDialog.isOpen && (
           <motion.div
             initial={{ opacity: 0 }}
