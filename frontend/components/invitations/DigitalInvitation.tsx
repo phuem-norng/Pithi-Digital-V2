@@ -5,6 +5,14 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { CalendarDays, ChevronLeft, ChevronRight, Eye, MapPin, Music2, Pause, Play, Share2, X } from 'lucide-react';
 import type { Event } from '@/lib/api-client';
 
+const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
+
+function seekIfNeeded(audio: HTMLAudioElement, targetTime: number) {
+  if (!Number.isFinite(targetTime)) return;
+  if (Math.abs(audio.currentTime - targetTime) < 0.35) return;
+  audio.currentTime = targetTime;
+}
+
 type DigitalInvitationProps = {
   eventData: Event;
 };
@@ -142,6 +150,10 @@ export default function DigitalInvitation({ eventData }: DigitalInvitationProps)
   const [isSlideshowPlaying, setIsSlideshowPlaying] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const galleryLoadMoreRef = useRef<HTMLDivElement | null>(null);
+  const playAttemptTokenRef = useRef(0);
+  const isAttemptingPlayRef = useRef(false);
+  const openClickLockRef = useRef(false);
+  const openClickAtRef = useRef(0);
 
   const metadata = (eventData.metadata || {}) as Record<string, unknown>;
   const { groomName, brideName } = useMemo(
@@ -159,6 +171,20 @@ export default function DigitalInvitation({ eventData }: DigitalInvitationProps)
   useEffect(() => {
     setVisibleGalleryCount(4);
   }, [galleryImages.length]);
+
+  const resolveClipRange = (audio: HTMLAudioElement) => {
+    const metadata = (eventData.metadata || {}) as Record<string, unknown>;
+    const start = typeof metadata.musicStartSec === 'number' ? metadata.musicStartSec : 0;
+    const end = typeof metadata.musicEndSec === 'number' ? metadata.musicEndSec : 0;
+    const duration = Number.isFinite(audio.duration) ? audio.duration : 0;
+    const safeDuration = duration > 0 ? duration : 0;
+    const safeStart = safeDuration > 0 ? clamp(start, 0, Math.max(0, safeDuration - 0.25)) : Math.max(0, start);
+    const safeEnd =
+      safeDuration > 0 && end > safeStart
+        ? clamp(end, 0, safeDuration)
+        : safeDuration;
+    return { start: safeStart, end: safeEnd, hasClip: safeDuration > 0 && safeEnd > safeStart && end > safeStart };
+  };
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -214,15 +240,73 @@ export default function DigitalInvitation({ eventData }: DigitalInvitationProps)
       return;
     }
 
+    playAttemptTokenRef.current += 1;
+    const token = playAttemptTokenRef.current;
+
     if (isMusicPlaying) {
-      void audio.play().catch(() => {
-        setIsMusicPlaying(false);
-      });
+      if (!audio.paused) {
+        setIsMusicPlaying(true);
+        return;
+      }
+
+      const playNow = async () => {
+        if (isAttemptingPlayRef.current) return;
+        isAttemptingPlayRef.current = true;
+        try {
+          const { start } = resolveClipRange(audio);
+          seekIfNeeded(audio, start);
+          await audio.play();
+          if (playAttemptTokenRef.current !== token) return;
+          setIsMusicPlaying(true);
+        } catch {
+          if (playAttemptTokenRef.current !== token) return;
+          setIsMusicPlaying(false);
+        } finally {
+          isAttemptingPlayRef.current = false;
+        }
+      };
+
+      void playNow();
       return;
     }
 
     audio.pause();
   }, [isMusicPlaying]);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio || !eventData.musicUrl) {
+      return;
+    }
+
+    const onTimeUpdate = () => {
+      const { start, end, hasClip } = resolveClipRange(audio);
+      if (!hasClip) return;
+      if (audio.currentTime >= Math.max(0, end - 0.05)) {
+        const wasPlaying = !audio.paused;
+        seekIfNeeded(audio, start);
+        if (wasPlaying) {
+          void audio.play().catch(() => {
+            setIsMusicPlaying(false);
+          });
+        }
+      }
+    };
+
+    const onLoaded = () => {
+      const { start } = resolveClipRange(audio);
+      if (start > 0) seekIfNeeded(audio, start);
+    };
+
+    audio.addEventListener('timeupdate', onTimeUpdate);
+    audio.addEventListener('loadedmetadata', onLoaded);
+    audio.addEventListener('durationchange', onLoaded);
+    return () => {
+      audio.removeEventListener('timeupdate', onTimeUpdate);
+      audio.removeEventListener('loadedmetadata', onLoaded);
+      audio.removeEventListener('durationchange', onLoaded);
+    };
+  }, [eventData.musicUrl, eventData.metadata]);
 
   useEffect(() => {
     if (activeGalleryIndex === null) {
@@ -291,6 +375,23 @@ export default function DigitalInvitation({ eventData }: DigitalInvitationProps)
     delay: (index % 8) * 0.55,
   }));
 
+  const handleOpenInvitation = () => {
+    const now = Date.now();
+    if (opened) return;
+    if (openClickLockRef.current && now - openClickAtRef.current < 1200) {
+      return;
+    }
+
+    openClickLockRef.current = true;
+    openClickAtRef.current = now;
+    setOpened(true);
+    setIsMusicPlaying(true);
+
+    window.setTimeout(() => {
+      openClickLockRef.current = false;
+    }, 1200);
+  };
+
   return (
     <article
       className={`relative text-white ${
@@ -344,7 +445,7 @@ export default function DigitalInvitation({ eventData }: DigitalInvitationProps)
         {isMusicPlaying ? <Pause className="h-5 w-5" /> : <Music2 className="h-5 w-5" />}
       </button>
 
-      {eventData.musicUrl ? <audio ref={audioRef} src={eventData.musicUrl} loop preload="none" /> : null}
+      {eventData.musicUrl ? <audio ref={audioRef} src={eventData.musicUrl} preload="none" /> : null}
 
       <AnimatePresence>
         {activeGalleryIndex !== null && galleryImages[activeGalleryIndex] ? (
@@ -455,10 +556,7 @@ export default function DigitalInvitation({ eventData }: DigitalInvitationProps)
               <p className="mt-2 text-sm text-white/90 font-khmer-body">{formatEventDate(eventData.date)}</p>
               <motion.button
                 type="button"
-                onClick={() => {
-                  setOpened(true);
-                  setIsMusicPlaying(true);
-                }}
+                onClick={handleOpenInvitation}
                 className="mt-5 inline-flex h-12 items-center justify-center rounded-full bg-white px-6 font-khmer-body font-semibold text-[#7a5a3b] shadow-lg"
                 animate={{ scale: [1, 1.04, 1] }}
                 transition={{ duration: 2, repeat: Number.POSITIVE_INFINITY, ease: 'easeInOut' }}

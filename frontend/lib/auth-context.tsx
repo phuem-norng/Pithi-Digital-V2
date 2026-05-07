@@ -22,6 +22,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Check if token exists and load user on mount
   useEffect(() => {
+    const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
+    const isTransientNetworkError = (error: unknown) => {
+      if (!error || typeof error !== 'object') return false;
+      const maybeAxios = error as { message?: string; code?: string; response?: unknown };
+      return (
+        maybeAxios.message === 'Network Error' ||
+        maybeAxios.code === 'ECONNABORTED' ||
+        (!maybeAxios.response && typeof maybeAxios.message === 'string')
+      );
+    };
+
     const checkAuth = async () => {
       try {
         // Check if token exists in localStorage
@@ -31,10 +42,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return;
         }
 
-        // Fetch current user
-        const currentUser = await apiClient.getCurrentUser();
-        setUser(currentUser);
+        // Fetch current user (retry a couple of times for transient dev restarts/network hiccups)
+        let lastError: unknown = null;
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          try {
+            const currentUser = await apiClient.getCurrentUser();
+            setUser(currentUser);
+            return;
+          } catch (error) {
+            lastError = error;
+            if (!isTransientNetworkError(error) || attempt === 2) {
+              throw error;
+            }
+            await wait(300 * (attempt + 1));
+          }
+        }
+
+        if (lastError) {
+          throw lastError;
+        }
       } catch (error) {
+        if (isTransientNetworkError(error)) {
+          // Keep existing token during temporary network blips; user can continue once API recovers.
+          console.warn('Auth check temporarily unavailable:', error);
+          return;
+        }
         console.error('Auth check failed:', error);
         apiClient.clearToken();
         setUser(null);

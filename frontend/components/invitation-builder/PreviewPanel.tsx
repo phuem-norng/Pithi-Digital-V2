@@ -5,6 +5,30 @@ import { Pause, Play } from 'lucide-react';
 import InvitationCard from './InvitationCard';
 import type { BuilderState } from './types';
 
+const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
+
+function seekIfNeeded(audio: HTMLAudioElement, targetTime: number) {
+  if (!Number.isFinite(targetTime)) return;
+  // Avoid repeated seeks that cause audible stutter during autoplay retries.
+  if (Math.abs(audio.currentTime - targetTime) < 0.35) return;
+  audio.currentTime = targetTime;
+}
+
+function resolveClipRange(audio: HTMLAudioElement, data: BuilderState) {
+  const duration = Number.isFinite(audio.duration) ? audio.duration : 0;
+  const start = typeof data.musicStartSec === 'number' ? data.musicStartSec : 0;
+  const end = typeof data.musicEndSec === 'number' ? data.musicEndSec : 0;
+
+  const safeDuration = duration > 0 ? duration : 0;
+  const safeStart = safeDuration > 0 ? clamp(start, 0, Math.max(0, safeDuration - 0.25)) : Math.max(0, start);
+  const safeEnd =
+    safeDuration > 0 && end > safeStart
+      ? clamp(end, 0, safeDuration)
+      : safeDuration;
+
+  return { start: safeStart, end: safeEnd, hasClip: safeDuration > 0 && safeEnd > safeStart && end > safeStart };
+}
+
 type PreviewPanelProps = {
   data: BuilderState;
 };
@@ -12,12 +36,16 @@ type PreviewPanelProps = {
 export default function PreviewPanel({ data }: PreviewPanelProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const playAttemptTokenRef = useRef(0);
 
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) {
       return;
     }
+
+    playAttemptTokenRef.current += 1;
+    const token = playAttemptTokenRef.current;
 
     if (!data.musicEnabled || !data.musicUrl) {
       audio.pause();
@@ -28,15 +56,75 @@ export default function PreviewPanel({ data }: PreviewPanelProps) {
 
     const tryPlay = async () => {
       try {
+        const { start } = resolveClipRange(audio, data);
+        seekIfNeeded(audio, start);
         await audio.play();
+        if (playAttemptTokenRef.current !== token) return;
         setIsPlaying(true);
       } catch {
+        if (playAttemptTokenRef.current !== token) return;
         setIsPlaying(false);
       }
     };
 
     tryPlay();
-  }, [data.musicEnabled, data.musicUrl]);
+  }, [data.musicEnabled, data.musicUrl, data.musicStartSec, data.musicEndSec]);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio || !data.musicEnabled || !data.musicUrl) return;
+
+    const onTimeUpdate = () => {
+      const { start, end, hasClip } = resolveClipRange(audio, data);
+      if (!hasClip) return;
+      if (audio.currentTime >= Math.max(0, end - 0.05)) {
+        const wasPlaying = !audio.paused;
+        seekIfNeeded(audio, start);
+        if (wasPlaying) {
+          void audio.play().catch(() => {
+            setIsPlaying(false);
+          });
+        }
+      }
+    };
+
+    const onLoaded = () => {
+      const { start } = resolveClipRange(audio, data);
+      if (start > 0) seekIfNeeded(audio, start);
+    };
+
+    audio.addEventListener('timeupdate', onTimeUpdate);
+    audio.addEventListener('loadedmetadata', onLoaded);
+    audio.addEventListener('durationchange', onLoaded);
+    return () => {
+      audio.removeEventListener('timeupdate', onTimeUpdate);
+      audio.removeEventListener('loadedmetadata', onLoaded);
+      audio.removeEventListener('durationchange', onLoaded);
+    };
+  }, [data.musicEnabled, data.musicUrl, data.musicStartSec, data.musicEndSec]);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const notifyPreviewPlay = () => {
+      window.dispatchEvent(new CustomEvent('pithi:builder-preview-music-play'));
+    };
+
+    const onEditorPlay = () => {
+      if (!audio.paused) {
+        audio.pause();
+        setIsPlaying(false);
+      }
+    };
+
+    audio.addEventListener('play', notifyPreviewPlay);
+    window.addEventListener('pithi:builder-editor-music-play', onEditorPlay);
+    return () => {
+      audio.removeEventListener('play', notifyPreviewPlay);
+      window.removeEventListener('pithi:builder-editor-music-play', onEditorPlay);
+    };
+  }, []);
 
   const handleToggleMusic = async () => {
     const audio = audioRef.current;
@@ -51,6 +139,8 @@ export default function PreviewPanel({ data }: PreviewPanelProps) {
     }
 
     try {
+      const { start } = resolveClipRange(audio, data);
+      seekIfNeeded(audio, start);
       await audio.play();
       setIsPlaying(true);
     } catch {
@@ -74,7 +164,7 @@ export default function PreviewPanel({ data }: PreviewPanelProps) {
               {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
             </button>
           </div>
-          <audio ref={audioRef} src={data.musicUrl} loop preload="auto" className="hidden" />
+          <audio ref={audioRef} src={data.musicUrl} preload="auto" className="hidden" />
         </div>
       ) : null}
 

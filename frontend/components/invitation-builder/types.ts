@@ -27,6 +27,12 @@ export type BuilderState = {
   musicEnabled: boolean;
   musicId: string;
   musicUrl: string;
+  /**
+   * Music clip range in seconds.
+   * - If `musicEndSec` is 0 (or <= start), treat as "play full track".
+   */
+  musicStartSec?: number;
+  musicEndSec?: number;
   textColor: string;
   headingColor: string;
   coverImageUrl: string;

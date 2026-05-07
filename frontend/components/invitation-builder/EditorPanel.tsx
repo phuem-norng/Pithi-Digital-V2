@@ -77,6 +77,8 @@ export default function EditorPanel({
             musicEnabled={data.musicEnabled}
             musicId={data.musicId}
             musicUrl={data.musicUrl}
+            musicStartSec={data.musicStartSec}
+            musicEndSec={data.musicEndSec}
             onChange={onChange}
           />
         </CardContent>

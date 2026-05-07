@@ -142,6 +142,8 @@ function createBuilderStateFromEvent(
     musicEnabled: true,
     musicId: 'classic',
     musicUrl: event.musicUrl || Assets.weddingMusic,
+    musicStartSec: 0,
+    musicEndSec: 0,
     textColor: styleDefaults.textColor,
     headingColor: styleDefaults.headingColor,
     coverImageUrl: templateImage || getSeededCoverImage(event.templateId || event.template?.id || event.title || event.date || ''),
@@ -247,6 +249,31 @@ export default function MyTemplatePreviewPage() {
   const S = useMemo(() => getEventDetailPageStrings(isKhmer), [isKhmer]);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const autoPlayRetryCountRef = useRef(0);
+  const playAttemptTokenRef = useRef(0);
+  const isAttemptingPlayRef = useRef(false);
+  const openClickLockRef = useRef(false);
+  const openClickAtRef = useRef(0);
+
+  const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
+
+  const seekIfNeeded = (audio: HTMLAudioElement, targetTime: number) => {
+    if (!Number.isFinite(targetTime)) return;
+    if (Math.abs(audio.currentTime - targetTime) < 0.35) return;
+    audio.currentTime = targetTime;
+  };
+
+  const resolveClipRange = (audio: HTMLAudioElement) => {
+    const duration = Number.isFinite(audio.duration) ? audio.duration : 0;
+    const start = typeof builderState?.musicStartSec === 'number' ? builderState.musicStartSec : 0;
+    const end = typeof builderState?.musicEndSec === 'number' ? builderState.musicEndSec : 0;
+    const safeDuration = duration > 0 ? duration : 0;
+    const safeStart = safeDuration > 0 ? clamp(start, 0, Math.max(0, safeDuration - 0.25)) : Math.max(0, start);
+    const safeEnd =
+      safeDuration > 0 && end > safeStart
+        ? clamp(end, 0, safeDuration)
+        : safeDuration;
+    return { start: safeStart, end: safeEnd, hasClip: safeDuration > 0 && safeEnd > safeStart && end > safeStart };
+  };
   const petals = Array.from({ length: 24 }, (_, index) => ({
     id: index,
     left: `${2 + ((index * 4.2) % 96)}%`,
@@ -261,7 +288,19 @@ export default function MyTemplatePreviewPage() {
       return false;
     }
 
+    if (!audio.paused) {
+      setIsPlaying(true);
+      return true;
+    }
+
+    if (isAttemptingPlayRef.current) {
+      return false;
+    }
+
+    isAttemptingPlayRef.current = true;
     try {
+      const { start } = resolveClipRange(audio);
+      seekIfNeeded(audio, start);
       audio.muted = !preferUnmuted;
       await audio.play();
       setIsPlaying(true);
@@ -279,6 +318,8 @@ export default function MyTemplatePreviewPage() {
     } catch {
       setIsPlaying(false);
       return false;
+    } finally {
+      isAttemptingPlayRef.current = false;
     }
   };
 
@@ -554,36 +595,68 @@ export default function MyTemplatePreviewPage() {
       return;
     }
 
+    if (!audio.paused) {
+      setIsPlaying(true);
+      return;
+    }
+
+    playAttemptTokenRef.current += 1;
+    const token = playAttemptTokenRef.current;
     autoPlayRetryCountRef.current = 0;
 
     let cancelled = false;
+    let settled = false;
+    let retryA: number | null = null;
+    let retryB: number | null = null;
+    let retryC: number | null = null;
+
+    const clearRetries = () => {
+      if (retryA) window.clearTimeout(retryA);
+      if (retryB) window.clearTimeout(retryB);
+      if (retryC) window.clearTimeout(retryC);
+      retryA = null;
+      retryB = null;
+      retryC = null;
+    };
+
+    const markSettled = () => {
+      if (settled) return;
+      settled = true;
+      clearRetries();
+    };
 
     const tryPlay = async () => {
+      if (playAttemptTokenRef.current !== token) return;
+      if (cancelled || settled) return;
       const playedWithSound = await attemptAutoPlay(true);
       if (cancelled || playedWithSound) {
+        if (playedWithSound) markSettled();
         return;
       }
 
-      await attemptAutoPlay(false);
+      const playedMuted = await attemptAutoPlay(false);
+      if (playedMuted) {
+        markSettled();
+      }
     };
 
     void tryPlay();
 
-    const retryA = window.setTimeout(() => {
+    retryA = window.setTimeout(() => {
       if (!cancelled) {
         autoPlayRetryCountRef.current += 1;
         void tryPlay();
       }
     }, 600);
 
-    const retryB = window.setTimeout(() => {
+    retryB = window.setTimeout(() => {
       if (!cancelled) {
         autoPlayRetryCountRef.current += 1;
         void tryPlay();
       }
     }, 1800);
 
-    const retryC = window.setTimeout(() => {
+    retryC = window.setTimeout(() => {
       if (!cancelled) {
         autoPlayRetryCountRef.current += 1;
         void tryPlay();
@@ -592,11 +665,44 @@ export default function MyTemplatePreviewPage() {
 
     return () => {
       cancelled = true;
-      window.clearTimeout(retryA);
-      window.clearTimeout(retryB);
-      window.clearTimeout(retryC);
+      clearRetries();
     };
-  }, [builderState?.musicEnabled, builderState?.musicUrl, isOpened]);
+  }, [builderState?.musicEnabled, builderState?.musicUrl, builderState?.musicStartSec, builderState?.musicEndSec, isOpened]);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio || !builderState?.musicEnabled || !builderState.musicUrl || !isOpened) {
+      return;
+    }
+
+    const onTimeUpdate = () => {
+      const { start, end, hasClip } = resolveClipRange(audio);
+      if (!hasClip) return;
+      if (audio.currentTime >= Math.max(0, end - 0.05)) {
+        const wasPlaying = !audio.paused;
+        seekIfNeeded(audio, start);
+        if (wasPlaying) {
+          void audio.play().catch(() => {
+            setIsPlaying(false);
+          });
+        }
+      }
+    };
+
+    const onLoaded = () => {
+      const { start } = resolveClipRange(audio);
+      if (start > 0) seekIfNeeded(audio, start);
+    };
+
+    audio.addEventListener('timeupdate', onTimeUpdate);
+    audio.addEventListener('loadedmetadata', onLoaded);
+    audio.addEventListener('durationchange', onLoaded);
+    return () => {
+      audio.removeEventListener('timeupdate', onTimeUpdate);
+      audio.removeEventListener('loadedmetadata', onLoaded);
+      audio.removeEventListener('durationchange', onLoaded);
+    };
+  }, [builderState?.musicEnabled, builderState?.musicUrl, builderState?.musicStartSec, builderState?.musicEndSec, isOpened]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -634,7 +740,7 @@ export default function MyTemplatePreviewPage() {
       window.removeEventListener('pageshow', resumeOnInteraction);
       document.removeEventListener('visibilitychange', resumeOnInteraction);
     };
-  }, [isPlaying, builderState?.musicEnabled, builderState?.musicUrl, isOpened]);
+  }, [isPlaying, builderState?.musicEnabled, builderState?.musicUrl, builderState?.musicStartSec, builderState?.musicEndSec, isOpened]);
 
   const handleToggleMusic = async () => {
     const audio = audioRef.current;
@@ -649,6 +755,8 @@ export default function MyTemplatePreviewPage() {
     }
 
     try {
+      const { start } = resolveClipRange(audio);
+      seekIfNeeded(audio, start);
       await audio.play();
       setIsPlaying(true);
     } catch {
@@ -690,16 +798,23 @@ export default function MyTemplatePreviewPage() {
   };
 
   const handleOpenInvitation = async () => {
+    const now = Date.now();
+    if (openClickLockRef.current && now - openClickAtRef.current < 1200) {
+      return;
+    }
     if (isCurtainOpening || isOpened) {
       return;
     }
 
+    openClickLockRef.current = true;
+    openClickAtRef.current = now;
     setIsCurtainOpening(true);
     await attemptAutoPlay(false);
 
     window.setTimeout(async () => {
       setIsOpened(true);
       setIsCurtainOpening(false);
+      openClickLockRef.current = false;
     }, 650);
   };
 
@@ -941,7 +1056,6 @@ export default function MyTemplatePreviewPage() {
               <audio
                 ref={audioRef}
                 src={builderState.musicUrl}
-                loop
                 preload="auto"
                 playsInline
                 onCanPlay={handleAudioCanPlay}

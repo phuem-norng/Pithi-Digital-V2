@@ -208,6 +208,8 @@ export default function InvitationBuilder({ event, initialState, onStateChange, 
       musicEnabled: true,
       musicId: 'classic',
       musicUrl: event?.musicUrl || fallbackMusicOptions[0]?.url || '',
+      musicStartSec: 0,
+      musicEndSec: 0,
       textColor: styleDefaults.textColor,
       headingColor: styleDefaults.headingColor,
       coverImageUrl: templateImage || getSeededCoverImage(event?.id || event?.title || formattedDate) || demoCoverImage,
@@ -274,6 +276,8 @@ export default function InvitationBuilder({ event, initialState, onStateChange, 
         styleVariant: (prev.styleVariant || styleDefaults.styleVariant) as BuilderState['styleVariant'],
         templateId: prev.templateId || event.templateId || event.template?.id,
         musicUrl: event.musicUrl || prev.musicUrl,
+        musicStartSec: typeof prev.musicStartSec === 'number' ? prev.musicStartSec : 0,
+        musicEndSec: typeof prev.musicEndSec === 'number' ? prev.musicEndSec : 0,
         coverImageUrl: prev.coverImageUrl || templateImage || getSeededCoverImage(event.id || event.title || event.date) || demoCoverImage,
         backgroundUrl: prev.backgroundUrl || styleDefaults.backgroundUrl,
         eventDate:
@@ -357,12 +361,32 @@ export default function InvitationBuilder({ event, initialState, onStateChange, 
 
   const [musicOptions, setMusicOptions] = useState<MusicOption[]>(fallbackMusicOptions);
   const [mobileView, setMobileView] = useState<'editor' | 'preview'>('editor');
+  const [isDesktopViewport, setIsDesktopViewport] = useState(() =>
+    typeof window !== 'undefined' ? window.matchMedia('(min-width: 768px)').matches : false,
+  );
 
   useEffect(() => {
     if (forceMobilePreviewToken > 0) {
       setMobileView('preview');
     }
   }, [forceMobilePreviewToken]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const mediaQuery = window.matchMedia('(min-width: 768px)');
+    const updateViewport = () => {
+      setIsDesktopViewport(mediaQuery.matches);
+    };
+
+    updateViewport();
+    mediaQuery.addEventListener('change', updateViewport);
+    return () => {
+      mediaQuery.removeEventListener('change', updateViewport);
+    };
+  }, []);
 
   useEffect(() => {
     apiClient.getMusic().then((tracks) => {
@@ -495,43 +519,45 @@ export default function InvitationBuilder({ event, initialState, onStateChange, 
 
   return (
     <section className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900" style={{ height: 'calc(100vh - 145px)' }}>
-      <div className="md:hidden h-full">
-        <div className="flex gap-2 border-b border-gray-100 bg-white p-3 dark:border-slate-700 dark:bg-slate-900">
-          <button
-            type="button"
-            onClick={() => setMobileView('editor')}
-            className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition ${mobileView === 'editor'
+      {isDesktopViewport ? (
+        <div className="h-full">
+          <ResizableSplitLayout
+            leftPanel={editorPanel}
+            rightPanel={previewPanel}
+            defaultLeftWidth={52.5}
+            minLeftWidth={300}
+            minRightWidth={350}
+          />
+        </div>
+      ) : (
+        <div className="h-full">
+          <div className="flex gap-2 border-b border-gray-100 bg-white p-3 dark:border-slate-700 dark:bg-slate-900">
+            <button
+              type="button"
+              onClick={() => setMobileView('editor')}
+              className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition ${mobileView === 'editor'
                 ? 'bg-[#C52133] text-white'
                 : 'bg-gray-100 text-gray-700 dark:bg-slate-800 dark:text-slate-200'
-              }`}
-          >
-            រៀបចំធៀបអញ្ជើញ
-          </button>
-          <button
-            type="button"
-            onClick={() => setMobileView('preview')}
-            className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition ${mobileView === 'preview'
+                }`}
+            >
+              រៀបចំធៀបអញ្ជើញ
+            </button>
+            <button
+              type="button"
+              onClick={() => setMobileView('preview')}
+              className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition ${mobileView === 'preview'
                 ? 'bg-[#C52133] text-white'
                 : 'bg-gray-100 text-gray-700 dark:bg-slate-800 dark:text-slate-200'
-              }`}
-          >
-            មើល Preview
-          </button>
+                }`}
+            >
+              មើល Preview
+            </button>
+          </div>
+          <div className="h-[calc(100%-60px)] overflow-hidden">
+            {mobileView === 'editor' ? editorPanel : previewPanel}
+          </div>
         </div>
-        <div className="h-[calc(100%-60px)] overflow-hidden">
-          {mobileView === 'editor' ? editorPanel : previewPanel}
-        </div>
-      </div>
-
-      <div className="hidden h-full md:block">
-        <ResizableSplitLayout
-          leftPanel={editorPanel}
-          rightPanel={previewPanel}
-          defaultLeftWidth={52.5}
-          minLeftWidth={300}
-          minRightWidth={350}
-        />
-      </div>
+      )}
     </section>
   );
 }
