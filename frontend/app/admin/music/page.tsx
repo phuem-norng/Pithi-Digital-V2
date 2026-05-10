@@ -2,12 +2,13 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Music, Pencil, Plus, Trash2, Upload, X } from 'lucide-react';
+import { Music, Pencil, Plus, Trash2, Upload } from 'lucide-react';
 import { apiClient, type MusicTrack } from '@/lib/api-client';
 import { useAuth } from '@/lib/auth-context';
 import { AdminSidebar } from '@/components/admin-sidebar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { MessageCard } from '@/components/ui/message-card';
 
 export default function AdminMusicPage() {
   const router = useRouter();
@@ -152,17 +153,10 @@ export default function AdminMusicPage() {
         </div>
 
         {(error || success) && (
-          <div ref={feedbackRef}>
-            {error && (
-              <div className="mb-4 flex items-center justify-between rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                {error}
-                <button onClick={() => setError('')}><X className="h-4 w-4" /></button>
-              </div>
-            )}
+          <div ref={feedbackRef} className="mb-4 space-y-3">
+            {error && <MessageCard text={error} tone="error" onClose={() => setError('')} className="p-3" />}
             {success && (
-              <div className="mb-4 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
-                {success}
-              </div>
+              <MessageCard text={success} tone="success" onClose={() => setSuccess('')} className="p-3" />
             )}
           </div>
         )}

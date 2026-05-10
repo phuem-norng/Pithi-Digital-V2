@@ -150,7 +150,10 @@ export function getEventDetailPageStrings(isKhmer: boolean) {
       generating: tkm('កំពុងបង្កើតតំណភ្ជាប់...', 'Generating link…'),
     },
     edit: {
-      lead: tkm('កែប្រែព័ត៌មានព្រឹត្តិការណ៍', 'Edit event details'),
+      lead: tkm(
+        'កែលម្អវាលខាងក្រោម ហើយរក្សាទុកពេលរួច។',
+        'Update the fields below, then save when you are done.',
+      ),
       groom: tkm('ឈ្មោះកូនកំលោះ', 'Groom name'),
       bride: tkm('ឈ្មោះកូនក្រមុំ', 'Bride name'),
       eventTypeCatalog: tkm('ប្រភេទកម្មវិធី (Catalog)', 'Event type (catalog)'),
@@ -172,9 +175,9 @@ export function getEventDetailPageStrings(isKhmer: boolean) {
       uploadFormats: tkm('PNG, JPG, GIF រហូតដល់ 50MB', 'PNG, JPG, GIF up to 50MB'),
       success: tkm('ជោគជ័យ', 'Success'),
       deleting: tkm('កំពុងលុប...', 'Deleting…'),
-      deleteEvent: tkm('លុបព្រឹត្តិការណ៍', 'Delete event'),
+      deleteEvent: tkm('លុប', 'Delete'),
       saving: tkm('កំពុងរក្សាទុក...', 'Saving…'),
-      save: tkm('កែប្រែ', 'Save changes'),
+      save: tkm('រក្សាទុក', 'Save'),
       validationWeddingNames: tkm(
         'សូមបំពេញឈ្មោះកូនប្រុស និង កូនស្រី',
         'Please enter the groom and bride names',

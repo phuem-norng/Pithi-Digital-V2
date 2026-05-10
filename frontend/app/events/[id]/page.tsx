@@ -4134,17 +4134,21 @@ function EventDetailPage() {
                 ))}
               </div>
 
-              <div className="md:col-span-2 flex flex-wrap items-center gap-3">
+              <div className="md:col-span-2 flex flex-wrap items-center gap-2">
                 <Button
                   type="button"
                   variant="outline"
                   disabled={isSavingEvent || isDeletingEvent}
                   onClick={handleDeleteEvent}
-                  className="border-red-300 text-red-600 hover:bg-red-50 dark:border-rose-700 dark:text-rose-300 dark:hover:bg-rose-900/20"
+                  className="h-9 min-w-0 shrink-0 rounded-lg border-orange-200/90 bg-orange-50/40 px-3 py-0 font-khmer-body text-[13px] font-medium leading-none text-orange-800 shadow-none transition-colors hover:border-orange-300 hover:bg-orange-100/70 dark:border-orange-800/60 dark:bg-orange-950/30 dark:text-orange-200 dark:hover:border-orange-600 dark:hover:bg-orange-950/50"
                 >
                   {isDeletingEvent ? S.edit.deleting : S.edit.deleteEvent}
                 </Button>
-                <Button type="submit" disabled={isSavingEvent || isDeletingEvent} className="bg-red-600 hover:bg-red-700">
+                <Button
+                  type="submit"
+                  disabled={isSavingEvent || isDeletingEvent}
+                  className="h-9 shrink-0 whitespace-nowrap rounded-lg border border-teal-700/90 px-4 py-0 font-khmer-body text-[13px] font-semibold leading-none !bg-teal-600 text-white shadow-sm shadow-teal-950/18 transition-colors hover:!bg-teal-500 hover:shadow-md hover:shadow-teal-950/25 active:translate-y-px dark:!bg-teal-600 dark:border-teal-500/35 dark:text-white dark:shadow-black/35 dark:hover:!bg-teal-500"
+                >
                   {isSavingEvent ? S.edit.saving : S.edit.save}
                 </Button>
               </div>
@@ -4817,9 +4821,11 @@ function EventDetailPage() {
         </div>
 
         {templateError && (
-          <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700 dark:border-rose-700 dark:bg-rose-900/30 dark:text-rose-300">
-            {templateError}
-          </div>
+          <MessageCard
+            text={templateError}
+            tone="error"
+            onClose={() => setTemplateError('')}
+          />
         )}
 
         {isTemplatesLoading ? (

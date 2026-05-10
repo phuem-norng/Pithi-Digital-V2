@@ -4,14 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { CalendarDays, ChevronLeft, ChevronRight, Eye, MapPin, Music2, Pause, Play, Share2, X } from 'lucide-react';
 import type { Event } from '@/lib/api-client';
-
-const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
-
-function seekIfNeeded(audio: HTMLAudioElement, targetTime: number) {
-  if (!Number.isFinite(targetTime)) return;
-  if (Math.abs(audio.currentTime - targetTime) < 0.35) return;
-  audio.currentTime = targetTime;
-}
+import { resolveClipRange, seekIfNeeded } from '@/components/invitation-builder/music-clip-utils';
 
 type DigitalInvitationProps = {
   eventData: Event;
@@ -156,6 +149,8 @@ export default function DigitalInvitation({ eventData }: DigitalInvitationProps)
   const openClickAtRef = useRef(0);
 
   const metadata = (eventData.metadata || {}) as Record<string, unknown>;
+  const musicStartSec = typeof metadata.musicStartSec === 'number' ? metadata.musicStartSec : 0;
+  const musicEndSec = typeof metadata.musicEndSec === 'number' ? metadata.musicEndSec : 0;
   const { groomName, brideName } = useMemo(
     () => parseCoupleNames(eventData.title, metadata),
     [eventData.title, metadata],
@@ -171,20 +166,6 @@ export default function DigitalInvitation({ eventData }: DigitalInvitationProps)
   useEffect(() => {
     setVisibleGalleryCount(4);
   }, [galleryImages.length]);
-
-  const resolveClipRange = (audio: HTMLAudioElement) => {
-    const metadata = (eventData.metadata || {}) as Record<string, unknown>;
-    const start = typeof metadata.musicStartSec === 'number' ? metadata.musicStartSec : 0;
-    const end = typeof metadata.musicEndSec === 'number' ? metadata.musicEndSec : 0;
-    const duration = Number.isFinite(audio.duration) ? audio.duration : 0;
-    const safeDuration = duration > 0 ? duration : 0;
-    const safeStart = safeDuration > 0 ? clamp(start, 0, Math.max(0, safeDuration - 0.25)) : Math.max(0, start);
-    const safeEnd =
-      safeDuration > 0 && end > safeStart
-        ? clamp(end, 0, safeDuration)
-        : safeDuration;
-    return { start: safeStart, end: safeEnd, hasClip: safeDuration > 0 && safeEnd > safeStart && end > safeStart };
-  };
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -253,7 +234,7 @@ export default function DigitalInvitation({ eventData }: DigitalInvitationProps)
         if (isAttemptingPlayRef.current) return;
         isAttemptingPlayRef.current = true;
         try {
-          const { start } = resolveClipRange(audio);
+          const { start } = resolveClipRange(audio, musicStartSec, musicEndSec, 0);
           seekIfNeeded(audio, start);
           await audio.play();
           if (playAttemptTokenRef.current !== token) return;
@@ -280,7 +261,7 @@ export default function DigitalInvitation({ eventData }: DigitalInvitationProps)
     }
 
     const onTimeUpdate = () => {
-      const { start, end, hasClip } = resolveClipRange(audio);
+      const { start, end, hasClip } = resolveClipRange(audio, musicStartSec, musicEndSec, 0);
       if (!hasClip) return;
       if (audio.currentTime >= Math.max(0, end - 0.05)) {
         const wasPlaying = !audio.paused;
@@ -294,7 +275,7 @@ export default function DigitalInvitation({ eventData }: DigitalInvitationProps)
     };
 
     const onLoaded = () => {
-      const { start } = resolveClipRange(audio);
+      const { start } = resolveClipRange(audio, musicStartSec, musicEndSec, 0);
       if (start > 0) seekIfNeeded(audio, start);
     };
 
@@ -306,7 +287,7 @@ export default function DigitalInvitation({ eventData }: DigitalInvitationProps)
       audio.removeEventListener('loadedmetadata', onLoaded);
       audio.removeEventListener('durationchange', onLoaded);
     };
-  }, [eventData.musicUrl, eventData.metadata]);
+  }, [eventData.musicUrl, eventData.metadata, musicStartSec, musicEndSec]);
 
   useEffect(() => {
     if (activeGalleryIndex === null) {

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useParams, useSearchParams } from 'next/navigation';
 import { ArrowLeft, LayoutTemplate, Save } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { MessageCard } from '@/components/ui/message-card';
 import { InvitationBuilder } from '@/components/invitation-builder';
 import { SupportContactFab } from '@/components/support-contact-fab';
 import type { BuilderState } from '@/components/invitation-builder/types';
@@ -227,17 +228,12 @@ export default function InvitationBuilderPage() {
 
       <main className="w-full px-4 pt-3 pb-8 sm:px-6 sm:pt-4 lg:px-8">
         {(saveStatus || error) && (
-          <div ref={feedbackRef}>
+          <div ref={feedbackRef} className="mb-4 space-y-3">
             {saveStatus && (
-              <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">
-                {saveStatus}
-              </div>
+              <MessageCard text={saveStatus} tone="success" onClose={() => setSaveStatus('')} className="p-3" />
             )}
-
             {error && (
-              <div className="mb-4 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
-                {error}
-              </div>
+              <MessageCard text={error} tone="error" onClose={() => setError('')} className="p-3" />
             )}
           </div>
         )}

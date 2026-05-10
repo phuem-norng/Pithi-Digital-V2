@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { SupportContactFab } from '@/components/support-contact-fab';
 import { Assets, getSeededCoverImage, getSeededGalleryImages } from '@/lib/assets';
 import InvitationCard from '@/components/invitation-builder/InvitationCard';
+import { resolveClipRange, seekIfNeeded } from '@/components/invitation-builder/music-clip-utils';
 import type { BuilderState, Language } from '@/components/invitation-builder/types';
 import { apiClient } from '@/lib/api-client';
 import { getSavedMyTemplateById } from '@/lib/my-templates';
@@ -254,26 +255,6 @@ export default function MyTemplatePreviewPage() {
   const openClickLockRef = useRef(false);
   const openClickAtRef = useRef(0);
 
-  const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
-
-  const seekIfNeeded = (audio: HTMLAudioElement, targetTime: number) => {
-    if (!Number.isFinite(targetTime)) return;
-    if (Math.abs(audio.currentTime - targetTime) < 0.35) return;
-    audio.currentTime = targetTime;
-  };
-
-  const resolveClipRange = (audio: HTMLAudioElement) => {
-    const duration = Number.isFinite(audio.duration) ? audio.duration : 0;
-    const start = typeof builderState?.musicStartSec === 'number' ? builderState.musicStartSec : 0;
-    const end = typeof builderState?.musicEndSec === 'number' ? builderState.musicEndSec : 0;
-    const safeDuration = duration > 0 ? duration : 0;
-    const safeStart = safeDuration > 0 ? clamp(start, 0, Math.max(0, safeDuration - 0.25)) : Math.max(0, start);
-    const safeEnd =
-      safeDuration > 0 && end > safeStart
-        ? clamp(end, 0, safeDuration)
-        : safeDuration;
-    return { start: safeStart, end: safeEnd, hasClip: safeDuration > 0 && safeEnd > safeStart && end > safeStart };
-  };
   const petals = Array.from({ length: 24 }, (_, index) => ({
     id: index,
     left: `${2 + ((index * 4.2) % 96)}%`,
@@ -299,7 +280,7 @@ export default function MyTemplatePreviewPage() {
 
     isAttemptingPlayRef.current = true;
     try {
-      const { start } = resolveClipRange(audio);
+      const { start } = resolveClipRange(audio, builderState?.musicStartSec, builderState?.musicEndSec, 0);
       seekIfNeeded(audio, start);
       audio.muted = !preferUnmuted;
       await audio.play();
@@ -676,7 +657,7 @@ export default function MyTemplatePreviewPage() {
     }
 
     const onTimeUpdate = () => {
-      const { start, end, hasClip } = resolveClipRange(audio);
+      const { start, end, hasClip } = resolveClipRange(audio, builderState?.musicStartSec, builderState?.musicEndSec, 0);
       if (!hasClip) return;
       if (audio.currentTime >= Math.max(0, end - 0.05)) {
         const wasPlaying = !audio.paused;
@@ -690,7 +671,7 @@ export default function MyTemplatePreviewPage() {
     };
 
     const onLoaded = () => {
-      const { start } = resolveClipRange(audio);
+      const { start } = resolveClipRange(audio, builderState?.musicStartSec, builderState?.musicEndSec, 0);
       if (start > 0) seekIfNeeded(audio, start);
     };
 
@@ -755,7 +736,7 @@ export default function MyTemplatePreviewPage() {
     }
 
     try {
-      const { start } = resolveClipRange(audio);
+      const { start } = resolveClipRange(audio, builderState?.musicStartSec, builderState?.musicEndSec, 0);
       seekIfNeeded(audio, start);
       await audio.play();
       setIsPlaying(true);

@@ -9,6 +9,7 @@ import { apiClient, Guest, User, Event, SupportLink } from '@/lib/api-client';
 import { useAuth } from '@/lib/auth-context';
 import { withProtectedRoute } from '@/lib/protected-route';
 import { Button } from '@/components/ui/button';
+import { MessageCard } from '@/components/ui/message-card';
 import { Input } from '@/components/ui/input';
 import { AdminSidebar, type AdminMenuKey } from '@/components/admin-sidebar';
 
@@ -1773,8 +1774,12 @@ function AdminAppBase({ activeMenu }: AdminAppProps) {
             </div>
           </header>
 
-          {success && <div className="mb-4 rounded-lg border border-green-200 bg-green-50 p-4 text-green-700">{success}</div>}
-          {error && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">{error}</div>}
+          {success && (
+            <MessageCard text={success} tone="success" onClose={() => setSuccess('')} className="mb-4 p-4" />
+          )}
+          {error && (
+            <MessageCard text={error} tone="error" onClose={() => setError('')} className="mb-4 p-4" />
+          )}
 
           {(isLoadingEvents || isLoadingUsers) && activeMenu !== 'users' && (
             <div className="mb-4 rounded-lg border border-gray-200 bg-white p-4 text-gray-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">Loading admin data...</div>

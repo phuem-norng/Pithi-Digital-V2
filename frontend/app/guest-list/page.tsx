@@ -6,6 +6,7 @@ import { ChevronLeft, ChevronRight, Copy, Search, Send, Users, X } from 'lucide-
 import { apiClient, Event, Guest } from '@/lib/api-client';
 import { withProtectedRoute } from '@/lib/protected-route';
 import { Input } from '@/components/ui/input';
+import { MessageCard } from '@/components/ui/message-card';
 
 type GuestWithUiFields = Guest & {
   group?: string;
@@ -207,8 +208,16 @@ function GuestListPage() {
             </div>
           </div>
 
-          {success && <div className="mt-4 rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-700">{success}</div>}
-          {error && <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
+          {(success || error) && (
+            <div className="mt-4 space-y-3">
+              {success && (
+                <MessageCard text={success} tone="success" onClose={() => setSuccess('')} className="p-3" />
+              )}
+              {error && (
+                <MessageCard text={error} tone="error" onClose={() => setError('')} className="p-3" />
+              )}
+            </div>
+          )}
         </div>
 
         <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(220px,1.2fr)]">
