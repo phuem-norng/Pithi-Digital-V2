@@ -60,8 +60,10 @@ export default function GallerySection({ images, onChange, lang }: GallerySectio
           <div key={idx} className="group relative h-24 overflow-hidden rounded-xl border border-gray-200 dark:border-slate-700">
             <img src={img} alt={`Gallery ${idx + 1}`} className="w-full h-full object-cover" />
             <button
+              type="button"
               onClick={() => removeImage(idx)}
-              className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+              className="absolute right-1 top-1 rounded-full bg-red-500 p-1 text-white opacity-100 ring-offset-2 transition-opacity hover:bg-red-600 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-red-400 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:focus-visible:opacity-100"
+              aria-label={isKm ? `លុបរូបទី ${idx + 1}` : `Remove gallery image ${idx + 1}`}
             >
               <X className="h-3 w-3" />
             </button>

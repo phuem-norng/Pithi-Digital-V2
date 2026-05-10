@@ -201,7 +201,7 @@ export function EventCard({ event, onDelete }: EventCardProps) {
             <div className="absolute right-3 top-3 z-20" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
               <button
                 type="button"
-                className="inline-flex h-8 items-center gap-1 rounded-full bg-rose-600/90 px-3 text-xs font-medium text-white opacity-0 backdrop-blur-sm transition-opacity duration-150 hover:bg-rose-700 group-hover:opacity-100 focus:opacity-100"
+                className="inline-flex h-8 items-center gap-1 rounded-full bg-rose-600/90 px-3 text-xs font-medium text-white opacity-100 backdrop-blur-sm transition-opacity duration-150 hover:bg-rose-700 focus-visible:opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:focus-visible:opacity-100"
                 onClick={(eventClick) => {
                   eventClick.preventDefault();
                   eventClick.stopPropagation();
