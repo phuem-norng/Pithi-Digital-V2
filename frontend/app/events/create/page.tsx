@@ -173,9 +173,9 @@ function CreateEventPage() {
 
   const labelClassName = 'mb-2 block text-sm font-medium text-gray-700 dark:text-slate-100 font-khmer-body';
   const inputClassName =
-    'h-11 rounded-xl border-gray-300 bg-white text-gray-900 placeholder:text-gray-400 shadow-sm transition focus-visible:border-red-500 focus-visible:ring-2 focus-visible:ring-red-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:placeholder:text-slate-500 dark:focus-visible:ring-slate-700';
+    'h-11 w-full min-w-0 max-w-full box-border rounded-xl border border-gray-300 bg-white text-gray-900 placeholder:text-gray-400 shadow-sm transition focus-visible:border-red-500 focus-visible:ring-2 focus-visible:ring-red-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:placeholder:text-slate-500 dark:focus-visible:ring-slate-700';
   const selectClassName =
-    'h-11 w-full rounded-xl border border-gray-300 bg-white px-3 text-sm text-gray-900 shadow-sm outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:focus:ring-slate-700';
+    'h-11 w-full min-w-0 max-w-full rounded-xl border border-gray-300 bg-white px-3 text-sm text-gray-900 shadow-sm outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:focus:ring-slate-700';
 
   const sanitizeEnglishDigits = (value: string) => value.replace(/[^0-9]/g, '');
 
@@ -479,9 +479,9 @@ function CreateEventPage() {
             </div>
           </header>
 
-          <main className="px-4 py-6 sm:px-6 sm:py-8">
-            <div className="mx-auto w-full max-w-5xl rounded-2xl bg-white p-4 text-gray-900 shadow-md dark:border dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 sm:p-8">
-              <form onSubmit={handleSubmit} className="space-y-5">
+          <main className="min-w-0 px-4 py-6 sm:px-6 sm:py-8">
+            <div className="mx-auto w-full min-w-0 max-w-5xl rounded-2xl bg-white p-4 text-gray-900 shadow-md dark:border dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 sm:p-8">
+              <form onSubmit={handleSubmit} className="min-w-0 space-y-5 [&>div]:min-w-0">
             {error && (
               <MessageCard text={error} tone="error" onClose={() => setError('')} className="p-4" />
             )}
@@ -508,12 +508,12 @@ function CreateEventPage() {
             </div>
 
             {eventType === 'WEDDING' && (
-              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+              <div className="grid min-w-0 grid-cols-1 gap-5 sm:grid-cols-2 [&>div]:min-w-0">
                 <div>
                   <label htmlFor="groomName" className={labelClassName}>
                     {isKhmer ? 'ឈ្មោះកូនប្រុស' : 'Groom Name'}<RequiredStar />
                   </label>
-                  <div className="relative">
+                  <div className="relative min-w-0 w-full max-w-full">
                     <User className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
                     <Input
                       id="groomName"
@@ -529,7 +529,7 @@ function CreateEventPage() {
                   <label htmlFor="brideName" className={labelClassName}>
                     {isKhmer ? 'ឈ្មោះកូនស្រី' : 'Bride Name'}<RequiredStar />
                   </label>
-                  <div className="relative">
+                  <div className="relative min-w-0 w-full max-w-full">
                     <Users className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
                     <Input
                       id="brideName"
@@ -563,7 +563,7 @@ function CreateEventPage() {
             )}
 
             {eventType === 'CEREMONY' && (
-              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+              <div className="grid min-w-0 grid-cols-1 gap-5 sm:grid-cols-2 [&>div]:min-w-0">
                 <div>
                   <label htmlFor="ceremonyName" className={labelClassName}>
                     {isKhmer ? 'ឈ្មោះពិធី' : 'Ceremony Name'}<RequiredStar />
@@ -606,12 +606,12 @@ function CreateEventPage() {
             )}
 
             {(eventType === 'HOUSEWARMING' || eventType === 'BIRTHDAY') && (
-              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+              <div className="grid min-w-0 grid-cols-1 gap-5 sm:grid-cols-2 [&>div]:min-w-0">
                 <div>
                   <label htmlFor="hostName" className={labelClassName}>
                     {isKhmer ? 'ឈ្មោះម្ចាស់កម្មវិធី' : 'Host Name'}<RequiredStar />
                   </label>
-                  <div className="relative">
+                  <div className="relative min-w-0 w-full max-w-full">
                     <Home className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
                     <Input
                       id="hostName"
@@ -627,7 +627,7 @@ function CreateEventPage() {
                   <label htmlFor="eventTitle" className={labelClassName}>
                     {isKhmer ? 'ចំណងជើងកម្មវិធី' : 'Event Title'}<RequiredStar />
                   </label>
-                  <div className="relative">
+                  <div className="relative min-w-0 w-full max-w-full">
                     <PartyPopper className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
                     <Input
                       id="eventTitle"
@@ -645,7 +645,7 @@ function CreateEventPage() {
               <label htmlFor="startDate" className={labelClassName}>
                 {isKhmer ? 'កាលបរិច្ឆេទ/ម៉ោង' : 'Date/Time'}<RequiredStar />
               </label>
-              <div className="relative">
+              <div className="relative min-w-0 w-full max-w-full">
                 <Calendar className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
                 <Input
                   id="startDate"
@@ -664,7 +664,7 @@ function CreateEventPage() {
               <label htmlFor="endDate" className={labelClassName}>
                 {isKhmer ? 'ថ្ងៃបញ្ចប់កម្មវិធី' : 'Event End Date'}
               </label>
-              <div className="relative">
+              <div className="relative min-w-0 w-full max-w-full">
                 <Calendar className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
                 <Input
                   id="endDate"
@@ -685,7 +685,7 @@ function CreateEventPage() {
               <p className="mb-2 text-xs text-gray-500 dark:text-slate-400 font-khmer-body">
                 {isKhmer ? 'មិនទាន់ដាក់ក៏បាន' : 'Optional'}
               </p>
-              <div className="relative">
+              <div className="relative min-w-0 w-full max-w-full">
                 <MapPin className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
                 <Input
                   id="address"
@@ -706,7 +706,7 @@ function CreateEventPage() {
               <p className="mb-2 text-xs text-gray-500 dark:text-slate-400 font-khmer-body">
                 {isKhmer ? 'មិនទាន់ដាក់ក៏បាន' : 'Optional'}
               </p>
-              <div className="relative">
+              <div className="relative min-w-0 w-full max-w-full">
                 <Globe className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
                 <Input
                   id="googleMapLink"

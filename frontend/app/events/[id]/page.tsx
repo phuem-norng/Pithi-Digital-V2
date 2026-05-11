@@ -3835,7 +3835,7 @@ function EventDetailPage() {
   };
 
   const renderEditTab = () => (
-    <section className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+    <section className="min-w-0 rounded-xl border border-gray-100 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
       <p className="mb-3 text-sm text-gray-500 dark:text-slate-400">{S.edit.lead}</p>
       <form
         onSubmit={handleSaveEvent}
@@ -3844,9 +3844,9 @@ function EventDetailPage() {
         {(() => {
           const editLabelClassName = 'mb-2 block text-sm font-medium text-gray-700 font-khmer-body dark:text-slate-300';
           const editInputClassName =
-            'h-11 rounded-xl border-gray-300 bg-white/90 text-gray-900 shadow-sm transition focus-visible:border-red-500 focus-visible:ring-2 focus-visible:ring-red-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:focus-visible:ring-slate-700';
+            'h-11 w-full min-w-0 max-w-full box-border rounded-xl border border-gray-300 bg-white/90 text-gray-900 shadow-sm transition focus-visible:border-red-500 focus-visible:ring-2 focus-visible:ring-red-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:focus-visible:ring-slate-700';
           const editSelectClassName =
-            'h-11 w-full rounded-xl border border-gray-300 bg-white px-3 text-sm text-gray-900 shadow-sm outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:focus:ring-slate-700';
+            'h-11 w-full min-w-0 max-w-full rounded-xl border border-gray-300 bg-white px-3 text-sm text-gray-900 shadow-sm outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:focus:ring-slate-700';
 
           return (
             <>
@@ -3981,7 +3981,7 @@ function EventDetailPage() {
                 <>
                   <div>
                     <label className={editLabelClassName}>Host Name<RequiredStar /></label>
-                    <div className="relative">
+                    <div className="relative min-w-0 w-full max-w-full">
                       <Home className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500 dark:text-slate-400" />
                       <Input
                         placeholder="Host Name"
@@ -3994,7 +3994,7 @@ function EventDetailPage() {
                   </div>
                   <div>
                     <label className={editLabelClassName}>Event Title<RequiredStar /></label>
-                    <div className="relative">
+                    <div className="relative min-w-0 w-full max-w-full">
                       <PartyPopper className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500 dark:text-slate-400" />
                       <Input
                         placeholder="Event Title"
@@ -4008,7 +4008,7 @@ function EventDetailPage() {
                 </>
               )}
 
-              <div>
+              <div className="min-w-0">
                 <label className={editLabelClassName}>{S.edit.startDate}<RequiredStar /></label>
                 <Input
                   type="datetime-local"
@@ -4020,7 +4020,7 @@ function EventDetailPage() {
                 />
               </div>
 
-              <div>
+              <div className="min-w-0">
                 <label className={editLabelClassName}>{S.edit.endDate}</label>
                 <Input
                   type="datetime-local"
@@ -4044,7 +4044,7 @@ function EventDetailPage() {
 
               <div>
                 <label className={editLabelClassName}>{S.edit.address}<RequiredStar /></label>
-                <div className="relative">
+                <div className="relative min-w-0 w-full max-w-full">
                   <MapPin className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500 dark:text-slate-400" />
                   <Input
                     value={editAddress}
@@ -4058,7 +4058,7 @@ function EventDetailPage() {
 
               <div className="md:col-span-2">
                 <label className={editLabelClassName}>Google Map</label>
-                <div className="relative">
+                <div className="relative min-w-0 w-full max-w-full">
                   <Globe className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500 dark:text-slate-400" />
                   <Input
                     type="url"
@@ -4207,7 +4207,7 @@ function EventDetailPage() {
 
   const renderScheduleTab = () => {
     const agendaFieldInputClassName =
-      'h-11 rounded-xl border-gray-300 bg-white/90 text-gray-900 shadow-sm transition focus-visible:border-red-500 focus-visible:ring-2 focus-visible:ring-red-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:focus-visible:ring-slate-700';
+      'h-11 w-full min-w-0 max-w-full box-border rounded-xl border border-gray-300 bg-white/90 text-gray-900 shadow-sm transition focus-visible:border-red-500 focus-visible:ring-2 focus-visible:ring-red-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:focus-visible:ring-slate-700';
 
     return (
     <section className="min-w-0 space-y-6 rounded-2xl border border-gray-100 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-900">
@@ -4236,7 +4236,7 @@ function EventDetailPage() {
       {!isAgendaCollapsed && (
         <div className="space-y-6 font-khmer-body">
           {agendaSections.map((section, sectionIndex) => (
-            <div key={section.id} className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+            <div key={section.id} className="min-w-0 rounded-3xl border border-gray-100 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
               <div className="mb-4 space-y-2">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <label className="text-sm font-medium text-gray-700 dark:text-slate-300">
@@ -4307,7 +4307,7 @@ function EventDetailPage() {
 
                         <div className="space-y-2">
                           <label className="text-xs font-medium text-gray-600 dark:text-slate-400">{S.schedule.date}</label>
-                          <div className="relative">
+                          <div className="relative min-w-0 w-full max-w-full">
                             <CalendarDays className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-slate-500" />
                             <Input
                               type="date"
@@ -4334,7 +4334,7 @@ function EventDetailPage() {
 
                         <div className="space-y-2">
                           <label className="text-xs font-medium text-gray-600 dark:text-slate-400">{S.schedule.time}</label>
-                          <div className="relative">
+                          <div className="relative min-w-0 w-full max-w-full">
                             <Clock3 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-slate-500" />
                             <Input
                               type="time"
