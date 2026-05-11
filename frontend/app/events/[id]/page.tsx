@@ -3839,7 +3839,7 @@ function EventDetailPage() {
       <p className="mb-3 text-sm text-gray-500 dark:text-slate-400">{S.edit.lead}</p>
       <form
         onSubmit={handleSaveEvent}
-        className="grid min-w-0 grid-cols-1 gap-5 md:grid-cols-2 [&>div]:min-w-0"
+        className="grid min-w-0 grid-cols-1 gap-5 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] [&>div]:min-w-0"
       >
         {(() => {
           const editLabelClassName = 'mb-2 block text-sm font-medium text-gray-700 font-khmer-body dark:text-slate-300';
@@ -4280,7 +4280,7 @@ function EventDetailPage() {
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
-                      <div className="grid min-w-0 gap-3 md:grid-cols-[1.2fr_0.6fr_0.6fr] [&>div]:min-w-0">
+                      <div className="grid min-w-0 gap-3 md:grid-cols-[minmax(0,1.2fr)_minmax(0,0.6fr)_minmax(0,0.6fr)] [&>div]:min-w-0">
                         <div className="space-y-2">
                           <label className="text-xs font-medium text-gray-600 dark:text-slate-400">{S.schedule.itemTitle}</label>
                           <Input

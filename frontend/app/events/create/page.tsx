@@ -508,7 +508,7 @@ function CreateEventPage() {
             </div>
 
             {eventType === 'WEDDING' && (
-              <div className="grid min-w-0 grid-cols-1 gap-5 sm:grid-cols-2 [&>div]:min-w-0">
+              <div className="grid min-w-0 grid-cols-1 gap-5 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] [&>div]:min-w-0">
                 <div>
                   <label htmlFor="groomName" className={labelClassName}>
                     {isKhmer ? 'ឈ្មោះកូនប្រុស' : 'Groom Name'}<RequiredStar />
@@ -563,7 +563,7 @@ function CreateEventPage() {
             )}
 
             {eventType === 'CEREMONY' && (
-              <div className="grid min-w-0 grid-cols-1 gap-5 sm:grid-cols-2 [&>div]:min-w-0">
+              <div className="grid min-w-0 grid-cols-1 gap-5 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] [&>div]:min-w-0">
                 <div>
                   <label htmlFor="ceremonyName" className={labelClassName}>
                     {isKhmer ? 'ឈ្មោះពិធី' : 'Ceremony Name'}<RequiredStar />
@@ -606,7 +606,7 @@ function CreateEventPage() {
             )}
 
             {(eventType === 'HOUSEWARMING' || eventType === 'BIRTHDAY') && (
-              <div className="grid min-w-0 grid-cols-1 gap-5 sm:grid-cols-2 [&>div]:min-w-0">
+              <div className="grid min-w-0 grid-cols-1 gap-5 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] [&>div]:min-w-0">
                 <div>
                   <label htmlFor="hostName" className={labelClassName}>
                     {isKhmer ? 'ឈ្មោះម្ចាស់កម្មវិធី' : 'Host Name'}<RequiredStar />

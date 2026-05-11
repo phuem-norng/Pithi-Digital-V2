@@ -252,3 +252,19 @@ html.theme-switch-no-transitions *::after {
   transition: none !important;
   animation: none !important;
 }
+
+/*
+  Mobile WebKit (Safari / in-app browsers): native date/time/datetime-local
+  controls use a large intrinsic min-width and can ignore flex min-width: 0
+  unless width is capped at the box level.
+*/
+input[type='date'],
+input[type='time'],
+input[type='datetime-local'],
+input[type='month'],
+input[type='week'] {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+  width: 100%;
+}
