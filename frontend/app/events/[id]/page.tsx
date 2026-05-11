@@ -3837,7 +3837,10 @@ function EventDetailPage() {
   const renderEditTab = () => (
     <section className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
       <p className="mb-3 text-sm text-gray-500 dark:text-slate-400">{S.edit.lead}</p>
-      <form onSubmit={handleSaveEvent} className="grid grid-cols-1 gap-5 md:grid-cols-2">
+      <form
+        onSubmit={handleSaveEvent}
+        className="grid min-w-0 grid-cols-1 gap-5 md:grid-cols-2 [&>div]:min-w-0"
+      >
         {(() => {
           const editLabelClassName = 'mb-2 block text-sm font-medium text-gray-700 font-khmer-body dark:text-slate-300';
           const editInputClassName =
@@ -4013,7 +4016,7 @@ function EventDetailPage() {
                   onChange={(e) => setEditDate(e.target.value)}
                   required
                   disabled={isSavingEvent}
-                  className={`${editInputClassName} w-full min-w-0 max-w-full text-sm`}
+                  className={editInputClassName}
                 />
               </div>
 
@@ -4024,7 +4027,7 @@ function EventDetailPage() {
                   value={editEndDate}
                   onChange={(e) => setEditEndDate(e.target.value)}
                   disabled={isSavingEvent}
-                  className={`${editInputClassName} w-full min-w-0 max-w-full text-sm`}
+                  className={editInputClassName}
                 />
               </div>
 
@@ -4202,8 +4205,12 @@ function EventDetailPage() {
     </section>
   );
 
-  const renderScheduleTab = () => (
-    <section className="space-y-6 rounded-2xl border border-gray-100 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+  const renderScheduleTab = () => {
+    const agendaFieldInputClassName =
+      'h-11 rounded-xl border-gray-300 bg-white/90 text-gray-900 shadow-sm transition focus-visible:border-red-500 focus-visible:ring-2 focus-visible:ring-red-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:focus-visible:ring-slate-700';
+
+    return (
+    <section className="min-w-0 space-y-6 rounded-2xl border border-gray-100 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-900">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-rose-50 text-[#C52133]">
@@ -4254,16 +4261,16 @@ function EventDetailPage() {
                     );
                   }}
                   placeholder={S.schedule.sectionPlaceholder}
-                  className="h-11 rounded-xl bg-gray-50 dark:bg-slate-800 dark:text-slate-100"
+                  className={agendaFieldInputClassName}
                 />
               </div>
 
-              <div className="relative pl-6">
+              <div className="relative min-w-0 pl-6">
                 <div className="absolute left-2 top-2 h-[calc(100%-16px)] border-l-2 border-dashed border-gray-200 dark:border-slate-700" />
 
                 <div className="space-y-3">
                   {section.items.map((item) => (
-                    <div key={item.id} className="relative overflow-hidden rounded-2xl bg-gray-50 p-4 dark:bg-slate-800">
+                    <div key={item.id} className="relative rounded-2xl bg-gray-50 p-4 dark:bg-slate-800">
                       <span className="absolute -left-6 top-5 h-3 w-3 rounded-full border-2 border-white bg-[#C52133] dark:border-slate-900" />
                       <button
                         type="button"
@@ -4273,8 +4280,8 @@ function EventDetailPage() {
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
-                      <div className="grid gap-3 md:grid-cols-[1.2fr_0.6fr_0.6fr]">
-                        <div className="min-w-0 space-y-2">
+                      <div className="grid min-w-0 gap-3 md:grid-cols-[1.2fr_0.6fr_0.6fr] [&>div]:min-w-0">
+                        <div className="space-y-2">
                           <label className="text-xs font-medium text-gray-600 dark:text-slate-400">{S.schedule.itemTitle}</label>
                           <Input
                             value={item.title}
@@ -4294,11 +4301,11 @@ function EventDetailPage() {
                               );
                             }}
                             placeholder={S.schedule.itemTitlePh}
-                            className="h-10 w-full min-w-0 max-w-full rounded-xl bg-white text-sm dark:bg-slate-900 dark:text-slate-100"
+                            className={agendaFieldInputClassName}
                           />
                         </div>
 
-                        <div className="min-w-0 space-y-2">
+                        <div className="space-y-2">
                           <label className="text-xs font-medium text-gray-600 dark:text-slate-400">{S.schedule.date}</label>
                           <div className="relative">
                             <CalendarDays className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-slate-500" />
@@ -4320,12 +4327,12 @@ function EventDetailPage() {
                                   ),
                                 );
                               }}
-                              className="h-10 w-full min-w-0 max-w-full rounded-xl bg-white pl-9 text-sm dark:bg-slate-900 dark:text-slate-100"
+                              className={`${agendaFieldInputClassName} pl-9`}
                             />
                           </div>
                         </div>
 
-                        <div className="min-w-0 space-y-2">
+                        <div className="space-y-2">
                           <label className="text-xs font-medium text-gray-600 dark:text-slate-400">{S.schedule.time}</label>
                           <div className="relative">
                             <Clock3 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-slate-500" />
@@ -4347,7 +4354,7 @@ function EventDetailPage() {
                                   ),
                                 );
                               }}
-                              className="h-10 w-full min-w-0 max-w-full rounded-xl bg-white pl-9 text-sm dark:bg-slate-900 dark:text-slate-100"
+                              className={`${agendaFieldInputClassName} pl-9`}
                             />
                           </div>
                         </div>
@@ -4409,7 +4416,8 @@ function EventDetailPage() {
         </div>
       )}
     </section>
-  );
+    );
+  };
 
   const handleRemoveMyTemplate = async (id: string) => {
     const confirmed = await requestConfirmation(S.myTemplate.confirmRemove);
