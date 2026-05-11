@@ -4013,7 +4013,7 @@ function EventDetailPage() {
                   onChange={(e) => setEditDate(e.target.value)}
                   required
                   disabled={isSavingEvent}
-                  className={editInputClassName}
+                  className={`${editInputClassName} w-full min-w-0 max-w-full text-sm`}
                 />
               </div>
 
@@ -4024,7 +4024,7 @@ function EventDetailPage() {
                   value={editEndDate}
                   onChange={(e) => setEditEndDate(e.target.value)}
                   disabled={isSavingEvent}
-                  className={editInputClassName}
+                  className={`${editInputClassName} w-full min-w-0 max-w-full text-sm`}
                 />
               </div>
 
@@ -4263,7 +4263,7 @@ function EventDetailPage() {
 
                 <div className="space-y-3">
                   {section.items.map((item) => (
-                    <div key={item.id} className="relative rounded-2xl bg-gray-50 p-4 dark:bg-slate-800">
+                    <div key={item.id} className="relative overflow-hidden rounded-2xl bg-gray-50 p-4 dark:bg-slate-800">
                       <span className="absolute -left-6 top-5 h-3 w-3 rounded-full border-2 border-white bg-[#C52133] dark:border-slate-900" />
                       <button
                         type="button"
@@ -4274,7 +4274,7 @@ function EventDetailPage() {
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
                       <div className="grid gap-3 md:grid-cols-[1.2fr_0.6fr_0.6fr]">
-                        <div className="space-y-2">
+                        <div className="min-w-0 space-y-2">
                           <label className="text-xs font-medium text-gray-600 dark:text-slate-400">{S.schedule.itemTitle}</label>
                           <Input
                             value={item.title}
@@ -4294,11 +4294,11 @@ function EventDetailPage() {
                               );
                             }}
                             placeholder={S.schedule.itemTitlePh}
-                            className="h-10 rounded-xl bg-white dark:bg-slate-900 dark:text-slate-100"
+                            className="h-10 w-full min-w-0 max-w-full rounded-xl bg-white text-sm dark:bg-slate-900 dark:text-slate-100"
                           />
                         </div>
 
-                        <div className="space-y-2">
+                        <div className="min-w-0 space-y-2">
                           <label className="text-xs font-medium text-gray-600 dark:text-slate-400">{S.schedule.date}</label>
                           <div className="relative">
                             <CalendarDays className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-slate-500" />
@@ -4320,12 +4320,12 @@ function EventDetailPage() {
                                   ),
                                 );
                               }}
-                              className="h-10 rounded-xl bg-white pl-9 dark:bg-slate-900 dark:text-slate-100"
+                              className="h-10 w-full min-w-0 max-w-full rounded-xl bg-white pl-9 text-sm dark:bg-slate-900 dark:text-slate-100"
                             />
                           </div>
                         </div>
 
-                        <div className="space-y-2">
+                        <div className="min-w-0 space-y-2">
                           <label className="text-xs font-medium text-gray-600 dark:text-slate-400">{S.schedule.time}</label>
                           <div className="relative">
                             <Clock3 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-slate-500" />
@@ -4347,7 +4347,7 @@ function EventDetailPage() {
                                   ),
                                 );
                               }}
-                              className="h-10 rounded-xl bg-white pl-9 dark:bg-slate-900 dark:text-slate-100"
+                              className="h-10 w-full min-w-0 max-w-full rounded-xl bg-white pl-9 text-sm dark:bg-slate-900 dark:text-slate-100"
                             />
                           </div>
                         </div>

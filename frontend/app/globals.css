@@ -245,3 +245,10 @@
 html[data-magicui-theme-vt='active']::view-transition-group(root) {
   animation-duration: var(--magicui-theme-toggle-vt-duration);
 }
+
+html.theme-switch-no-transitions *,
+html.theme-switch-no-transitions *::before,
+html.theme-switch-no-transitions *::after {
+  transition: none !important;
+  animation: none !important;
+}

@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Moon, Sun } from 'lucide-react';
-import { flushSync } from 'react-dom';
 
 import { cn } from '@/lib/utils';
 
@@ -36,6 +35,17 @@ function prefersSimpleThemeToggle(): boolean {
     /* matchMedia unavailable */
   }
   return false;
+}
+
+function applyThemeWithoutTransitions(callback: () => void): void {
+  const root = document.documentElement;
+  root.classList.add('theme-switch-no-transitions');
+  callback();
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      root.classList.remove('theme-switch-no-transitions');
+    });
+  });
 }
 
 function getThemeTransitionClipPaths(
@@ -185,7 +195,7 @@ export function AnimatedThemeToggler({
     const doc = document as Document & { startViewTransition?: (cb: () => void) => { finished?: Promise<void> } };
 
     if (prefersSimpleThemeToggle() || typeof doc.startViewTransition !== 'function') {
-      applyTheme();
+      applyThemeWithoutTransitions(applyTheme);
       return;
     }
 
@@ -194,7 +204,7 @@ export function AnimatedThemeToggler({
     root.style.setProperty('--magicui-theme-toggle-vt-duration', `${duration}ms`);
 
     const transition = doc.startViewTransition(() => {
-      flushSync(applyTheme);
+      applyThemeWithoutTransitions(applyTheme);
     });
 
     const cleanup = () => {
