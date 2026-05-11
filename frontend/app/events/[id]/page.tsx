@@ -52,6 +52,8 @@ import {
   Send,
   Store,
   Trash2,
+  TrendingDown,
+  TrendingUp,
   Upload,
   User,
   Users,
@@ -59,7 +61,6 @@ import {
   X,
   DollarSign,
   EyeOff,
-  TrendingUp,
   Save,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -70,7 +71,8 @@ import { InvitationBuilder } from '@/components/invitation-builder';
 import ImageCover from '@/components/invitation-builder/sections/ImageCover';
 import { DashboardLanguageThemeControls } from '@/components/dashboard-language-theme-controls';
 import type { BuilderState } from '@/components/invitation-builder/types';
-import { apiClient, Event, EventStats, EventType as ApiEventType, Expense, Gift, Guest, Template } from '@/lib/api-client';
+import { apiClient } from '@/lib/api-client';
+import type { Event, EventStats, EventType as ApiEventType, Expense, Gift, Guest, Template } from '@/lib/api-client';
 import { EVENT_CATEGORY_BY_KEY, EVENT_CATEGORY_OPTIONS, EventFlowType } from '@/lib/event-categories';
 import { getSavedMyTemplates, MyTemplateItem, removeMyTemplate, saveMyTemplate, syncMyTemplatesForEvent } from '@/lib/my-templates';
 import { withProtectedRoute } from '@/lib/protected-route';
@@ -87,6 +89,7 @@ import {
   getGuestGroupLabel,
   getGuestTagLabel,
 } from '@/lib/event-detail-page-i18n';
+import { formatUsdCurrency, USD_KHR_EXCHANGE_RATE } from '@/lib/gift-exchange';
 
 type TabId =
   | 'general'
@@ -1810,7 +1813,7 @@ function EventDetailPage() {
     const acceptRate = totalGuests > 0 ? Math.round((acceptedGuests / totalGuests) * 100) : 0;
     const pendingRate = totalGuests > 0 ? Math.round((pendingGuests / totalGuests) * 100) : 0;
     const declineRate = totalGuests > 0 ? Math.round((declinedGuests / totalGuests) * 100) : 0;
-    const exchangeRate = 4000;
+    const exchangeRate = USD_KHR_EXCHANGE_RATE;
     const totalGiftUsd = giftRows
       .filter((row) => row.currencyType === 'USD')
       .reduce((sum, row) => sum + (row.amount || 0), 0);
@@ -1826,33 +1829,73 @@ function EventDetailPage() {
     return (
       <div className="space-y-6 font-khmer-body">
 
-        <section className="flex gap-4 overflow-x-auto pb-2 xl:grid xl:grid-cols-5 xl:overflow-visible">
-          <div className="min-w-[250px] rounded-3xl border border-sky-100 bg-sky-50/70 p-6 shadow-sm xl:min-w-0">
-            <p className="font-khmer-heading text-sm text-sky-700">{S.general.invitedGuests}</p>
-            <p className="mt-2 text-3xl font-semibold text-sky-900">{totalGuests}</p>
+        <section className="flex gap-4 overflow-x-auto pb-2 [-webkit-overflow-scrolling:touch] xl:grid xl:grid-cols-5 xl:overflow-visible">
+          <div className="flex h-36 min-w-[250px] shrink-0 flex-col rounded-2xl border border-sky-200/90 bg-sky-50 p-4 shadow-sm xl:min-w-0 dark:border-slate-600 dark:bg-slate-900">
+            <div className="flex shrink-0 items-start justify-between gap-2">
+              <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/90 text-sky-600 shadow-sm ring-1 ring-sky-100 dark:bg-slate-800 dark:text-sky-400 dark:ring-slate-600">
+                <Users className="h-5 w-5" />
+              </span>
+              <p className="shrink-0 text-right font-khmer-heading text-3xl font-semibold tabular-nums text-sky-800 dark:text-sky-100">
+                {totalGuests}
+              </p>
+            </div>
+            <p className="mt-auto min-w-0 text-sm font-medium leading-snug text-sky-800 dark:text-sky-200">{S.general.invitedGuests}</p>
           </div>
-          <div className="min-w-[250px] rounded-3xl border border-emerald-100 bg-emerald-50/70 p-6 shadow-sm xl:min-w-0">
-            <p className="font-khmer-heading text-sm text-emerald-700">{S.general.totalConfirmed}</p>
-            <p className="mt-2 text-3xl font-semibold text-emerald-900">{acceptedGuests}</p>
+
+          <div className="flex h-36 min-w-[250px] shrink-0 flex-col rounded-2xl border border-emerald-200/90 bg-emerald-50 p-4 shadow-sm xl:min-w-0 dark:border-slate-600 dark:bg-slate-900">
+            <div className="flex shrink-0 items-start justify-between gap-2">
+              <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/90 text-emerald-600 shadow-sm ring-1 ring-emerald-100 dark:bg-slate-800 dark:text-emerald-400 dark:ring-slate-600">
+                <CheckCircle2 className="h-5 w-5" />
+              </span>
+              <p className="shrink-0 text-right font-khmer-heading text-3xl font-semibold tabular-nums text-emerald-800 dark:text-emerald-100">
+                {acceptedGuests}
+              </p>
+            </div>
+            <p className="mt-auto min-w-0 text-sm font-medium leading-snug text-emerald-800 dark:text-emerald-200">{S.general.totalConfirmed}</p>
           </div>
-          <div className="min-w-[250px] rounded-3xl border border-violet-100 bg-violet-50/70 p-6 shadow-sm xl:min-w-0">
-            <p className="font-khmer-heading text-sm text-violet-700">{S.general.inRiel}</p>
-            <p className="mt-2 text-3xl font-semibold text-violet-900">៛{formatAmount(totalGiftKhr)}</p>
-            <p className="mt-2 text-xs text-violet-700">{S.general.exchangeNote}</p>
+
+          <div className="flex h-36 min-w-[250px] shrink-0 flex-col rounded-2xl border border-violet-200/90 bg-violet-50 p-4 shadow-sm xl:min-w-0 dark:border-slate-600 dark:bg-slate-900">
+            <div className="flex shrink-0 items-start justify-between gap-2">
+              <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/90 text-violet-600 shadow-sm ring-1 ring-violet-100 dark:bg-slate-800 dark:text-violet-400 dark:ring-slate-600">
+                <TrendingUp className="h-5 w-5" />
+              </span>
+              <p className="shrink-0 text-right font-khmer-heading text-3xl font-semibold tabular-nums text-violet-800 dark:text-violet-100">
+                {formatUsdCurrency(totalGiftAsUsd)}
+              </p>
+            </div>
+            <p className="mt-auto min-w-0 text-xs font-medium leading-snug text-violet-800 sm:text-sm dark:text-violet-200">
+              {S.gifts.totalAsUsd} {S.general.exchangeNote}
+            </p>
           </div>
-          <div className="min-w-[250px] rounded-3xl border border-rose-100 bg-rose-50/70 p-6 shadow-sm xl:min-w-0">
-            <p className="font-khmer-heading text-sm text-rose-700">{S.general.expenses}</p>
-            <p className="mt-2 text-3xl font-semibold text-rose-900">${formatUsd(totalExpenseActualUsd)}</p>
-            <div className="mt-3">
-              <p className="text-xs text-rose-700">{expensePercent}%</p>
-              <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-rose-100">
-                <div className="h-full rounded-full bg-rose-400" style={{ width: `${Math.min(100, expensePercent)}%` }} />
+
+          <div className="flex h-36 min-w-[250px] shrink-0 flex-col rounded-2xl border border-rose-200/90 bg-rose-50 p-4 shadow-sm xl:min-w-0 dark:border-slate-600 dark:bg-slate-900">
+            <div className="flex shrink-0 items-start justify-between gap-2">
+              <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/90 text-rose-600 shadow-sm ring-1 ring-rose-100 dark:bg-slate-800 dark:text-rose-400 dark:ring-slate-600">
+                <DollarSign className="h-5 w-5" />
+              </span>
+              <p className="shrink-0 text-right font-khmer-heading text-3xl font-semibold tabular-nums text-rose-800 dark:text-rose-100">
+                {formatUsdCurrency(totalExpenseActualUsd)}
+              </p>
+            </div>
+            <div className="mt-auto min-w-0 space-y-1.5">
+              <p className="text-sm font-medium leading-snug text-rose-800 dark:text-rose-200">{S.general.expenses}</p>
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-rose-100/90 dark:bg-rose-950/50">
+                <div className="h-full rounded-full bg-rose-400 dark:bg-rose-500" style={{ width: `${Math.min(100, expensePercent)}%` }} />
               </div>
+              <p className="text-[11px] font-medium tabular-nums text-rose-700 dark:text-rose-300">{expensePercent}%</p>
             </div>
           </div>
-          <div className="min-w-[250px] rounded-3xl border border-teal-100 bg-teal-50/70 p-6 shadow-sm xl:min-w-0">
-            <p className="font-khmer-heading text-sm text-teal-700">{S.general.profitLoss}</p>
-            <p className="mt-2 text-3xl font-semibold text-teal-900">${formatUsd(profitLossUsd)}</p>
+
+          <div className="flex h-36 min-w-[250px] shrink-0 flex-col rounded-2xl border border-teal-200/90 bg-teal-50 p-4 shadow-sm xl:min-w-0 dark:border-slate-600 dark:bg-slate-900">
+            <div className="flex shrink-0 items-start justify-between gap-2">
+              <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/90 text-teal-600 shadow-sm ring-1 ring-teal-100 dark:bg-slate-800 dark:text-teal-400 dark:ring-slate-600">
+                {profitLossUsd >= 0 ? <TrendingUp className="h-5 w-5" /> : <TrendingDown className="h-5 w-5" />}
+              </span>
+              <p className="shrink-0 text-right font-khmer-heading text-3xl font-semibold tabular-nums text-teal-800 dark:text-teal-100">
+                {formatUsdCurrency(profitLossUsd)}
+              </p>
+            </div>
+            <p className="mt-auto min-w-0 text-sm font-medium leading-snug text-teal-800 dark:text-teal-200">{S.general.profitLoss}</p>
           </div>
         </section>
 
@@ -2472,7 +2515,7 @@ function EventDetailPage() {
 
                     return (
                       <tr key={guest.id} className="transition-colors hover:bg-gray-50 dark:hover:bg-slate-800">
-                        <td className="px-6 py-4 whitespace-nowrap">
+                        <td className="px-2 py-3 sm:px-6 sm:py-4 whitespace-nowrap">
                           <input
                             type="checkbox"
                             checked={selectedGuestIds.includes(guest.id)}
@@ -2487,17 +2530,17 @@ function EventDetailPage() {
                         </td>
                         <td className="px-6 py-4 font-semibold text-gray-900 whitespace-nowrap dark:text-slate-100">{guest.name}</td>
                         <td className="px-6 py-4 text-gray-700 whitespace-nowrap dark:text-slate-300">{guest.phone || '-'}</td>
-                        <td className="px-6 py-4 whitespace-nowrap">
+                        <td className="px-2 py-3 sm:px-6 sm:py-4 whitespace-nowrap">
                           <span className={`inline-flex rounded-full px-2.5 py-1 text-xs ${getGroupBadgeClass(guest.group || 'GROOM_SIDE')} whitespace-nowrap`}>
                             {getGroupLabel(guest.group)}
                           </span>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
+                        <td className="px-2 py-3 sm:px-6 sm:py-4 whitespace-nowrap">
                           <span className={`inline-flex rounded-full px-2.5 py-1 text-xs ${getTagBadgeClass(guest.tag || 'OTHERS')} whitespace-nowrap`}>
                             {getTagLabel(guest.tag)}
                           </span>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
+                        <td className="px-2 py-3 sm:px-6 sm:py-4 whitespace-nowrap">
                           <span className={`inline-flex rounded-full px-2.5 py-1 text-xs ${statusMeta.classes} whitespace-nowrap`}>
                             {statusMeta.label}
                           </span>
@@ -2536,7 +2579,7 @@ function EventDetailPage() {
                             '-'
                           )}
                         </td>
-                        <td className="relative px-6 py-4 whitespace-nowrap">
+                        <td className="relative px-2 py-3 sm:px-6 sm:py-4 whitespace-nowrap">
                           <div className="flex items-center justify-end gap-2">
                             <button
                               type="button"
@@ -3176,7 +3219,7 @@ function EventDetailPage() {
       setError('');
       setSuccess(S.gifts.giftPreparing);
 
-      const exchangeRateForExport = 4000;
+      const exchangeRateForExport = USD_KHR_EXCHANGE_RATE;
       const exportRows = rowsToExport.map((row, index) => {
         const amountUsd = row.currencyType === 'USD' ? row.amount : row.amount / exchangeRateForExport;
         const amountKhr = row.currencyType === 'KHR' ? row.amount : row.amount * exchangeRateForExport;
@@ -3216,7 +3259,7 @@ function EventDetailPage() {
     const allGiftRowsSelected =
       pagedGiftRows.length > 0 && pagedGiftRows.every((row) => selectedGiftRowIds.includes(row.id));
 
-    const exchangeRate = 4000;
+    const exchangeRate = USD_KHR_EXCHANGE_RATE;
     const receivedGiftCount = giftRows.length;
     const totalUsd = giftRows
       .filter((row) => row.currencyType === 'USD')
@@ -3230,68 +3273,68 @@ function EventDetailPage() {
       return new Intl.NumberFormat('en-US').format(value || 0);
     };
 
-    const formatUsd = (value: number) => {
-      return new Intl.NumberFormat('en-US', {
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 2,
-      }).format(value || 0);
-    };
-
     const currencyLabel = (value: 'USD' | 'KHR') =>
       value === 'USD' ? S.gifts.currencyUsd : S.gifts.currencyKhr;
     const paymentLabel = (value: 'CASH' | 'KHQR') =>
       value === 'CASH' ? S.gifts.payCash : S.gifts.payKhqr;
 
     return (
-      <section className="space-y-4 rounded-2xl bg-gray-50 p-4 font-khmer-body dark:bg-slate-950">
-        <div className="flex gap-4 overflow-x-auto pb-2 md:grid md:grid-cols-2 md:overflow-visible xl:grid-cols-4">
-          <div className="flex h-32 min-w-[250px] items-center justify-between rounded-2xl border border-blue-100 bg-white p-5 shadow-sm md:min-w-0 dark:border-slate-700 dark:bg-slate-900">
-            <div className="flex items-center gap-3">
-              <span className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-blue-50 text-blue-600">
+      <section className="space-y-3 font-khmer-body sm:space-y-4">
+        <div className="flex gap-4 overflow-x-auto pb-2 [-webkit-overflow-scrolling:touch] md:grid md:grid-cols-2 md:gap-4 md:overflow-visible xl:grid-cols-4">
+          <div className="flex h-36 min-w-[250px] shrink-0 flex-col rounded-2xl border border-sky-200/90 bg-sky-50 p-4 shadow-sm md:min-w-0 dark:border-slate-600 dark:bg-slate-900">
+            <div className="flex shrink-0 items-start justify-between gap-2">
+              <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/90 text-sky-600 shadow-sm ring-1 ring-sky-100 dark:bg-slate-800 dark:text-sky-400 dark:ring-slate-600">
                 <Users className="h-5 w-5" />
               </span>
-              <p className="text-sm text-gray-600 dark:text-slate-300">{S.gifts.summaryReceived}</p>
+              <p className="shrink-0 text-right font-khmer-heading text-3xl font-semibold tabular-nums text-sky-800 dark:text-sky-100">
+                {formatAmount(receivedGiftCount)}
+              </p>
             </div>
-            <p className="font-khmer-heading text-3xl text-gray-900 dark:text-slate-100">{formatAmount(receivedGiftCount)}</p>
+            <p className="mt-auto min-w-0 text-sm font-medium leading-snug text-sky-800 dark:text-sky-200">{S.gifts.summaryReceived}</p>
           </div>
 
-          <div className="flex h-32 min-w-[250px] items-center justify-between rounded-2xl border border-emerald-100 bg-white p-5 shadow-sm md:min-w-0 dark:border-slate-700 dark:bg-slate-900">
-            <div className="flex items-center gap-3">
-              <span className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
+          <div className="flex h-36 min-w-[250px] shrink-0 flex-col rounded-2xl border border-emerald-200/90 bg-emerald-50 p-4 shadow-sm md:min-w-0 dark:border-slate-600 dark:bg-slate-900">
+            <div className="flex shrink-0 items-start justify-between gap-2">
+              <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/90 text-emerald-600 shadow-sm ring-1 ring-emerald-100 dark:bg-slate-800 dark:text-emerald-400 dark:ring-slate-600">
                 <DollarSign className="h-5 w-5" />
               </span>
-              <p className="text-sm text-gray-600 dark:text-slate-300">{S.gifts.totalUsd}</p>
+              <p className="shrink-0 text-right font-khmer-heading text-3xl font-semibold tabular-nums text-emerald-800 dark:text-emerald-100">
+                {formatUsdCurrency(totalUsd)}
+              </p>
             </div>
-            <p className="font-khmer-heading text-3xl text-gray-900 dark:text-slate-100">{formatUsd(totalUsd)}</p>
+            <p className="mt-auto min-w-0 text-sm font-medium leading-snug text-emerald-800 dark:text-emerald-200">{S.gifts.totalUsd}</p>
           </div>
 
-          <div className="flex h-32 min-w-[250px] items-center justify-between rounded-2xl border border-violet-100 bg-white p-5 shadow-sm md:min-w-0 dark:border-slate-700 dark:bg-slate-900">
-            <div className="flex items-center gap-3">
-              <span className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-violet-50 text-violet-600 font-semibold">
+          <div className="flex h-36 min-w-[250px] shrink-0 flex-col rounded-2xl border border-violet-200/90 bg-violet-50 p-4 shadow-sm md:min-w-0 dark:border-slate-600 dark:bg-slate-900">
+            <div className="flex shrink-0 items-start justify-between gap-2">
+              <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/90 font-semibold text-violet-600 shadow-sm ring-1 ring-violet-100 dark:bg-slate-800 dark:text-violet-400 dark:ring-slate-600">
                 ៛
               </span>
-              <p className="text-sm text-gray-600 dark:text-slate-300">{S.gifts.totalKhr}</p>
+              <p className="shrink-0 text-right font-khmer-heading text-3xl font-semibold tabular-nums text-violet-800 dark:text-violet-100">
+                ៛{formatAmount(totalKhr)}
+              </p>
             </div>
-            <p className="font-khmer-heading text-3xl text-gray-900 dark:text-slate-100">{formatAmount(totalKhr)}</p>
+            <p className="mt-auto min-w-0 text-sm font-medium leading-snug text-violet-800 dark:text-violet-200">{S.gifts.totalKhr}</p>
           </div>
 
-          <div className="flex h-32 min-w-[250px] flex-col justify-between rounded-2xl border border-rose-100 bg-white p-5 shadow-sm md:min-w-0 dark:border-slate-700 dark:bg-slate-900">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <span className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-rose-50 text-rose-600">
-                  <TrendingUp className="h-5 w-5" />
-                </span>
-                <p className="text-sm text-gray-600 dark:text-slate-300">{S.gifts.totalAsUsd}</p>
-              </div>
-              <p className="font-khmer-heading text-3xl text-gray-900 dark:text-slate-100">{formatUsd(totalAsUsd)}</p>
+          <div className="flex h-36 min-w-[250px] shrink-0 flex-col rounded-2xl border border-rose-200/90 bg-rose-50 p-4 shadow-sm md:min-w-0 dark:border-slate-600 dark:bg-slate-900">
+            <div className="flex shrink-0 items-start justify-between gap-2">
+              <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/90 text-rose-600 shadow-sm ring-1 ring-rose-100 dark:bg-slate-800 dark:text-rose-400 dark:ring-slate-600">
+                <TrendingUp className="h-5 w-5" />
+              </span>
+              <p className="shrink-0 text-right font-khmer-heading text-3xl font-semibold tabular-nums text-rose-800 dark:text-rose-100">
+                {formatUsdCurrency(totalAsUsd)}
+              </p>
             </div>
-            <p className="text-xs text-gray-500 dark:text-slate-400">{S.gifts.exchangeNote}</p>
+            <p className="mt-auto min-w-0 text-xs font-medium leading-snug text-rose-800 sm:text-sm dark:text-rose-200">
+              {S.gifts.totalAsUsd} {S.gifts.exchangeNote}
+            </p>
           </div>
         </div>
 
-        <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <h2 className="font-khmer-heading text-2xl text-gray-900 dark:text-slate-100">{S.gifts.title}</h2>
+        <div className="rounded-xl border border-gray-100 bg-white p-3 shadow-sm sm:rounded-2xl sm:p-5 dark:border-slate-700 dark:bg-slate-900">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2 sm:mb-4 sm:gap-3">
+            <h2 className="font-khmer-heading text-xl text-gray-900 sm:text-2xl dark:text-slate-100">{S.gifts.title}</h2>
 
             <div className="flex flex-wrap items-center gap-2">
               <button
@@ -3323,7 +3366,7 @@ function EventDetailPage() {
             </div>
           </div>
 
-          <div className="mb-4">
+          <div className="mb-3 sm:mb-4">
             <div className="relative max-w-md">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-slate-400" />
               <Input
@@ -3333,16 +3376,16 @@ function EventDetailPage() {
                   setGiftPage(1);
                 }}
                 placeholder={S.gifts.searchPh}
-                className="h-11 rounded-full border-gray-200 pl-10"
+                className="h-10 rounded-lg border-gray-200 pl-10 sm:h-11 sm:rounded-full"
               />
             </div>
           </div>
 
-          <div className="overflow-x-auto whitespace-nowrap max-w-full rounded-xl border border-gray-100 bg-white scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 dark:border-slate-700 dark:bg-slate-900 dark:scrollbar-thumb-slate-600 dark:scrollbar-track-slate-800">
+          <div className="max-w-full overflow-x-auto whitespace-nowrap rounded-lg border border-gray-100 bg-white px-0 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 sm:rounded-xl sm:px-2 dark:border-slate-700 dark:bg-slate-900 dark:scrollbar-thumb-slate-600 dark:scrollbar-track-slate-800">
             <table className="min-w-full table-auto text-sm">
               <thead className="bg-gray-50 dark:bg-slate-800">
                 <tr>
-                  <th className="w-12 px-5 py-3 text-left">
+                  <th className="w-12 px-3 py-2 sm:px-5 sm:py-3 text-left">
                     <input
                       type="checkbox"
                       checked={allGiftRowsSelected}
@@ -3356,19 +3399,19 @@ function EventDetailPage() {
                       }}
                     />
                   </th>
-                  <th className="px-5 py-3 text-left font-semibold text-gray-700 sticky left-0 z-10 bg-white dark:bg-slate-900 dark:text-slate-200">{S.gifts.thGuest}</th>
-                  <th className="px-5 py-3 text-left font-semibold text-gray-700 dark:text-slate-200">{S.gifts.thPhone}</th>
-                  <th className="px-5 py-3 text-left font-semibold text-gray-700 dark:text-slate-200">{S.gifts.thPayType}</th>
-                  <th className="px-5 py-3 text-left font-semibold text-gray-700 dark:text-slate-200">{S.gifts.thCurrency}</th>
-                  <th className="px-5 py-3 text-left font-semibold text-gray-700 dark:text-slate-200">{S.gifts.thAmount}</th>
-                  <th className="px-5 py-3 text-left font-semibold text-gray-700 dark:text-slate-200">{S.gifts.thNote}</th>
-                  <th className="px-5 py-3 text-right font-semibold text-gray-700 dark:text-slate-200">{S.gifts.thActions}</th>
+                  <th className="px-3 py-2 sm:px-5 sm:py-3 text-left font-semibold text-gray-700 sticky left-0 z-10 bg-white dark:bg-slate-900 dark:text-slate-200">{S.gifts.thGuest}</th>
+                  <th className="px-3 py-2 sm:px-5 sm:py-3 text-left font-semibold text-gray-700 dark:text-slate-200">{S.gifts.thPhone}</th>
+                  <th className="px-3 py-2 sm:px-5 sm:py-3 text-left font-semibold text-gray-700 dark:text-slate-200">{S.gifts.thPayType}</th>
+                  <th className="px-3 py-2 sm:px-5 sm:py-3 text-left font-semibold text-gray-700 dark:text-slate-200">{S.gifts.thCurrency}</th>
+                  <th className="px-3 py-2 sm:px-5 sm:py-3 text-left font-semibold text-gray-700 dark:text-slate-200">{S.gifts.thAmount}</th>
+                  <th className="px-3 py-2 sm:px-5 sm:py-3 text-left font-semibold text-gray-700 dark:text-slate-200">{S.gifts.thNote}</th>
+                  <th className="px-3 py-2 sm:px-5 sm:py-3 text-right font-semibold text-gray-700 dark:text-slate-200">{S.gifts.thActions}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 bg-white dark:divide-slate-700 dark:bg-slate-900">
                 {pagedGiftRows.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="px-5 py-14 text-center text-gray-500 dark:text-slate-400">
+                    <td colSpan={8} className="px-3 py-10 text-center text-gray-500 sm:px-5 sm:py-14 dark:text-slate-400">
                       {S.gifts.noData}
                     </td>
                   </tr>
@@ -3376,7 +3419,7 @@ function EventDetailPage() {
 
                 {pagedGiftRows.map((row) => (
                   <tr key={row.id} className="hover:bg-gray-50 dark:hover:bg-slate-800">
-                    <td className="px-5 py-3">
+                    <td className="px-3 py-2 sm:px-5 sm:py-3">
                       <input
                         type="checkbox"
                         checked={selectedGiftRowIds.includes(row.id)}
@@ -3389,7 +3432,7 @@ function EventDetailPage() {
                         }}
                       />
                     </td>
-                    <td className="px-5 py-3 text-gray-900 sticky left-0 z-10 bg-white dark:bg-slate-900 dark:text-slate-100">
+                    <td className="px-3 py-2 sm:px-5 sm:py-3 text-gray-900 sticky left-0 z-10 bg-white dark:bg-slate-900 dark:text-slate-100">
                       <div className="inline-flex items-center gap-2">
                         <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-rose-50 text-[#C52133]">
                           <User className="h-4 w-4" />
@@ -3397,8 +3440,8 @@ function EventDetailPage() {
                         <span>{row.guestName}</span>
                       </div>
                     </td>
-                    <td className="px-5 py-3 text-gray-700 dark:text-slate-300">{row.phone || '-'}</td>
-                    <td className="px-5 py-3">
+                    <td className="px-3 py-2 sm:px-5 sm:py-3 text-gray-700 dark:text-slate-300">{row.phone || '-'}</td>
+                    <td className="px-3 py-2 sm:px-5 sm:py-3">
                       <span
                         className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${row.paymentType === 'CASH'
                           ? 'bg-emerald-100 text-emerald-700'
@@ -3408,7 +3451,7 @@ function EventDetailPage() {
                         {paymentLabel(row.paymentType)}
                       </span>
                     </td>
-                    <td className="px-5 py-3">
+                    <td className="px-3 py-2 sm:px-5 sm:py-3">
                       <span
                         className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${row.currencyType === 'USD'
                           ? 'bg-blue-100 text-blue-700'
@@ -3418,7 +3461,7 @@ function EventDetailPage() {
                         {currencyLabel(row.currencyType)}
                       </span>
                     </td>
-                    <td className="px-5 py-3">
+                    <td className="px-3 py-2 sm:px-5 sm:py-3">
                       <span
                         className={`inline-flex items-center rounded-lg px-2.5 py-1 text-sm font-semibold ${row.currencyType === 'USD'
                           ? 'bg-blue-50 text-blue-700'
@@ -3428,7 +3471,7 @@ function EventDetailPage() {
                         {row.currencyType === 'USD' ? '$' : '៛'} {formatAmount(row.amount)}
                       </span>
                     </td>
-                    <td className="px-5 py-3 text-gray-700 dark:text-slate-300">
+                    <td className="px-3 py-2 sm:px-5 sm:py-3 text-gray-700 dark:text-slate-300">
                       {row.note && row.note !== '-' ? (
                         <button
                           type="button"
@@ -3443,7 +3486,7 @@ function EventDetailPage() {
                         '-'
                       )}
                     </td>
-                    <td className="px-5 py-3">
+                    <td className="px-3 py-2 sm:px-5 sm:py-3">
                       <div className="flex items-center justify-end gap-2">
                         <button
                           type="button"
@@ -5249,10 +5292,10 @@ function EventDetailPage() {
     };
 
     return (
-      <section className="space-y-4 rounded-2xl bg-gray-50 p-4 font-khmer-body dark:bg-slate-950">
-        <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <h2 className="font-khmer-heading text-2xl text-gray-900 dark:text-slate-100">{S.expenses.title}</h2>
+      <section className="space-y-4 font-khmer-body">
+        <div className="rounded-xl border border-gray-100 bg-white p-3 shadow-sm sm:p-5 dark:border-slate-700 dark:bg-slate-900">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2 sm:mb-4 sm:gap-3">
+            <h2 className="font-khmer-heading text-xl text-gray-900 sm:text-2xl dark:text-slate-100">{S.expenses.title}</h2>
             <div className="flex flex-wrap items-center gap-2">
               <Button
                 type="button"
@@ -5292,23 +5335,23 @@ function EventDetailPage() {
             </div>
           </div>
 
-          <div className="mb-4">
+          <div className="mb-3 sm:mb-4">
             <div className="relative max-w-md">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-slate-400" />
               <Input
                 value={expenseSearch}
                 onChange={(event) => setExpenseSearch(event.target.value)}
                 placeholder={S.expenses.searchPh}
-                className="h-11 rounded-full border-gray-200 pl-10"
+                className="h-10 rounded-lg border-gray-200 pl-10 sm:h-11 sm:rounded-full"
               />
             </div>
           </div>
 
-          <div className="overflow-x-auto w-full max-w-full px-2 rounded-xl border border-gray-100 bg-white dark:border-slate-700 dark:bg-slate-900">
+          <div className="w-full max-w-full overflow-x-auto rounded-lg border border-gray-100 bg-white px-0 sm:rounded-xl sm:px-2 dark:border-slate-700 dark:bg-slate-900">
             <table className="min-w-full table-auto text-sm whitespace-nowrap">
               <thead className="bg-gray-50 dark:bg-slate-800">
                 <tr>
-                  <th className="w-12 px-5 py-3 text-left whitespace-nowrap">
+                  <th className="w-12 px-3 py-2 sm:px-5 sm:py-3 text-left whitespace-nowrap">
                     <input
                       type="checkbox"
                       checked={allExpenseRowsSelected}
@@ -5322,7 +5365,7 @@ function EventDetailPage() {
                     />
                   </th>
                   {visibleColumns.name && (
-                    <th className="px-5 py-3 text-left font-semibold text-gray-700 whitespace-nowrap dark:text-slate-200">
+                    <th className="px-3 py-2 sm:px-5 sm:py-3 text-left font-semibold text-gray-700 whitespace-nowrap dark:text-slate-200">
                       <button
                         type="button"
                         onClick={(event) => openMenu('name', event.currentTarget)}
@@ -5334,7 +5377,7 @@ function EventDetailPage() {
                     </th>
                   )}
                   {visibleColumns.budget && (
-                    <th className="px-5 py-3 text-left font-semibold text-gray-700 whitespace-nowrap dark:text-slate-200">
+                    <th className="px-3 py-2 sm:px-5 sm:py-3 text-left font-semibold text-gray-700 whitespace-nowrap dark:text-slate-200">
                       <button
                         type="button"
                         onClick={(event) => openMenu('budget', event.currentTarget)}
@@ -5346,7 +5389,7 @@ function EventDetailPage() {
                     </th>
                   )}
                   {visibleColumns.actual && (
-                    <th className="px-5 py-3 text-left font-semibold text-gray-700 whitespace-nowrap dark:text-slate-200">
+                    <th className="px-3 py-2 sm:px-5 sm:py-3 text-left font-semibold text-gray-700 whitespace-nowrap dark:text-slate-200">
                       <button
                         type="button"
                         onClick={(event) => openMenu('actual', event.currentTarget)}
@@ -5358,7 +5401,7 @@ function EventDetailPage() {
                     </th>
                   )}
                   {visibleColumns.note && (
-                    <th className="px-5 py-3 text-left font-semibold text-gray-700 whitespace-nowrap dark:text-slate-200">
+                    <th className="px-3 py-2 sm:px-5 sm:py-3 text-left font-semibold text-gray-700 whitespace-nowrap dark:text-slate-200">
                       <button
                         type="button"
                         onClick={(event) => openMenu('note', event.currentTarget)}
@@ -5369,7 +5412,7 @@ function EventDetailPage() {
                       </button>
                     </th>
                   )}
-                  <th className="px-5 py-3 text-right font-semibold text-gray-700 whitespace-nowrap dark:text-slate-200">{S.expenses.thActions}</th>
+                  <th className="px-3 py-2 sm:px-5 sm:py-3 text-right font-semibold text-gray-700 whitespace-nowrap dark:text-slate-200">{S.expenses.thActions}</th>
                 </tr>
               </thead>
               <tbody className="bg-white dark:bg-slate-900">
@@ -5383,7 +5426,7 @@ function EventDetailPage() {
                         (visibleColumns.actual ? 1 : 0) +
                         (visibleColumns.note ? 1 : 0)
                       }
-                      className="px-5 py-14 text-center text-gray-500 whitespace-nowrap dark:text-slate-400"
+                      className="px-3 py-10 text-center text-gray-500 whitespace-nowrap sm:px-5 sm:py-14 dark:text-slate-400"
                     >
                       {S.expenses.noDataRow}
                     </td>
@@ -5397,7 +5440,7 @@ function EventDetailPage() {
 
                     return (
                       <tr key={row.id}>
-                        <td className="px-6 py-4 whitespace-nowrap">
+                        <td className="px-2 py-3 sm:px-6 sm:py-4 whitespace-nowrap">
                           <input
                             type="checkbox"
                             checked={selectedExpenseRowIds.includes(row.id)}
@@ -5411,21 +5454,21 @@ function EventDetailPage() {
                           />
                         </td>
                         {visibleColumns.name && (
-                          <td className="px-6 py-4 whitespace-nowrap">
+                          <td className="px-2 py-3 sm:px-6 sm:py-4 whitespace-nowrap">
                             <div className="rounded-2xl border border-gray-100 bg-white px-4 py-3 text-sm text-[#7A1F2B] whitespace-nowrap dark:border-slate-700 dark:bg-slate-800 dark:text-rose-300">
                               {row.name}
                             </div>
                           </td>
                         )}
                         {visibleColumns.budget && (
-                          <td className="px-6 py-4 whitespace-nowrap">
+                          <td className="px-2 py-3 sm:px-6 sm:py-4 whitespace-nowrap">
                             <div className="rounded-2xl border border-gray-100 bg-white px-4 py-3 text-sm text-gray-700 whitespace-nowrap dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
                               ${formatCurrency(budgetValue)}
                             </div>
                           </td>
                         )}
                         {visibleColumns.actual && (
-                          <td className="px-6 py-4 whitespace-nowrap">
+                          <td className="px-2 py-3 sm:px-6 sm:py-4 whitespace-nowrap">
                             <div className="rounded-2xl border border-gray-100 bg-white px-4 py-3 text-sm text-gray-700 whitespace-nowrap dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
                               <div className="flex items-center justify-between text-xs text-gray-500 whitespace-nowrap dark:text-slate-400">
                                 <span>${formatCurrency(actualValue)}</span>
@@ -5442,7 +5485,7 @@ function EventDetailPage() {
                           </td>
                         )}
                         {visibleColumns.note && (
-                          <td className="px-6 py-4 whitespace-nowrap">
+                          <td className="px-2 py-3 sm:px-6 sm:py-4 whitespace-nowrap">
                             <button
                               type="button"
                               onClick={() => setExpenseDescriptionPreview(row.note || '')}
@@ -5454,7 +5497,7 @@ function EventDetailPage() {
                             </button>
                           </td>
                         )}
-                        <td className="px-6 py-4 whitespace-nowrap">
+                        <td className="px-2 py-3 sm:px-6 sm:py-4 whitespace-nowrap">
                           <div className="flex items-center justify-end gap-2">
                             <button
                               type="button"
@@ -6051,20 +6094,19 @@ function EventDetailPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 font-khmer-body dark:bg-slate-950 dark:text-slate-100">
-      <header className="border-b border-gray-100 bg-white dark:border-slate-800 dark:bg-slate-900">
-        <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
-          <Link href="/dashboard">
-            <Button variant="outline" className="mb-4 border-gray-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800">
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              {S.layout.back}
-            </Button>
-          </Link>
-
-          <div className="flex items-start justify-between gap-4">
-            <h1 className="font-khmer-body text-[1.7rem] font-semibold leading-[1.2] tracking-tight text-gray-900 dark:text-slate-100 sm:font-khmer-heading sm:text-3xl sm:leading-tight">
-              {event.title}
-            </h1>
-            <div className="flex items-center gap-2">
+      <div className="sticky top-0 z-40 border-b border-gray-100 bg-white/95 shadow-sm backdrop-blur-md dark:border-slate-800 dark:bg-slate-900/95">
+        <div className="mx-auto max-w-[1400px] px-2 py-3 sm:px-6 sm:py-3.5 lg:px-8">
+          <h1 className="sr-only font-khmer-body text-[1.7rem] font-semibold leading-[1.2] tracking-tight text-gray-900 dark:text-slate-100 sm:font-khmer-heading sm:text-3xl sm:leading-tight">
+            {event.title}
+          </h1>
+          <div className="flex items-center justify-between gap-3">
+            <Link href="/dashboard">
+              <Button variant="outline" className="border-gray-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800">
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                {S.layout.back}
+              </Button>
+            </Link>
+            <div className="flex shrink-0 items-center gap-2">
               <DashboardLanguageThemeControls />
               <Link
                 href={externalPreviewPath}
@@ -6077,9 +6119,7 @@ function EventDetailPage() {
             </div>
           </div>
         </div>
-      </header>
 
-      <main className="mx-auto max-w-6xl px-4 pt-4 pb-8 sm:px-6 lg:px-8">
         {/*
           Change this to 'minimal' if you want monochrome tabs.
           Available presets: 'glass' | 'minimal'
@@ -6103,7 +6143,7 @@ function EventDetailPage() {
             tabStylePreset === 'glass' ? 'h-4 w-4 text-slate-500 dark:text-slate-300' : 'h-4 w-4 text-gray-500 dark:text-slate-400';
 
           return (
-            <div className="mb-6 overflow-x-auto">
+            <div className="mx-auto max-w-[1400px] overflow-x-auto px-2 pb-3 sm:px-6 lg:px-8">
               <nav
                 className={navClassName}
                 onMouseEnter={() => setIsTabNavHovered(true)}
@@ -6156,7 +6196,9 @@ function EventDetailPage() {
             </div>
           );
         })()}
+      </div>
 
+      <main className="mx-auto max-w-[1400px] px-2 pt-4 pb-8 sm:px-6 lg:px-8">
         {(error || success) && (
           <div ref={feedbackRef}>
             <MessageCard

@@ -26,6 +26,18 @@ function polygonCollapsed(cx: number, cy: number, vertexCount: number): string {
   return `polygon(${pairs})`;
 }
 
+/** Full-document view transitions + flushSync are heavy on mobile and often feel stuttery on hosting. */
+function prefersSimpleThemeToggle(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return true;
+    if (window.matchMedia('(hover: none) and (pointer: coarse)').matches) return true;
+  } catch {
+    /* matchMedia unavailable */
+  }
+  return false;
+}
+
 function getThemeTransitionClipPaths(
   variant: TransitionVariant,
   cx: number,
@@ -170,7 +182,9 @@ export function AnimatedThemeToggler({
       localStorage.setItem('theme', newTheme ? 'dark' : 'light');
     };
 
-    if (typeof (document as Document & { startViewTransition?: (cb: () => void) => any }).startViewTransition !== 'function') {
+    const doc = document as Document & { startViewTransition?: (cb: () => void) => { finished?: Promise<void> } };
+
+    if (prefersSimpleThemeToggle() || typeof doc.startViewTransition !== 'function') {
       applyTheme();
       return;
     }
@@ -179,7 +193,7 @@ export function AnimatedThemeToggler({
     root.dataset.magicuiThemeVt = 'active';
     root.style.setProperty('--magicui-theme-toggle-vt-duration', `${duration}ms`);
 
-    const transition = (document as Document & { startViewTransition: (cb: () => void) => any }).startViewTransition(() => {
+    const transition = doc.startViewTransition(() => {
       flushSync(applyTheme);
     });
 

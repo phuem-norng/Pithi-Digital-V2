@@ -25,7 +25,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
     const isTransientNetworkError = (error: unknown) => {
       if (!error || typeof error !== 'object') return false;
-      const maybeAxios = error as { message?: string; code?: string; response?: unknown };
+      const maybeAxios = error as {
+        message?: string;
+        code?: string;
+        response?: { status?: number };
+      };
+      const status = maybeAxios.response?.status;
+      // DB down / overloaded — keep session; user can retry when API recovers
+      if (status === 503) return true;
       return (
         maybeAxios.message === 'Network Error' ||
         maybeAxios.code === 'ECONNABORTED' ||

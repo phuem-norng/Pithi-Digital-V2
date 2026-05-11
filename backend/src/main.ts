@@ -2,6 +2,7 @@ import 'dotenv/config';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
+import { PrismaDatabaseExceptionFilter } from './prisma/prisma-database.filter';
 import { existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { NestExpressApplication } from '@nestjs/platform-express';
@@ -86,6 +87,8 @@ async function bootstrap() {
       transform: true, // auto transform types
     }),
   );
+
+  app.useGlobalFilters(new PrismaDatabaseExceptionFilter());
 
   // ✅ Port config and start server
   const port = process.env.PORT || 3001;

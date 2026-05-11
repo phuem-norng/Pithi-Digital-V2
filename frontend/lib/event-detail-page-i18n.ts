@@ -77,6 +77,10 @@ export function getEventDetailPageStrings(isKhmer: boolean) {
       invitedGuests: tkm('ភ្ញៀវដែលបានអញ្ជើញ', 'Invited guests'),
       totalConfirmed: tkm('ចំនួនអ្នកបានចូលរួមសរុប', 'Total confirmed'),
       inRiel: tkm('ជាប្រាក់រៀល', 'In riel (៛)'),
+      /** Suffix for “(៛n) …” line on gift summary blocks */
+      giftValueAsRiel: tkm('ជាប្រាក់រៀល', 'in Riel'),
+      /** Closing line under USD/KHR + rate (combined gift value context) */
+      giftsCombinedTotal: tkm('ចំណងដៃសរុប', 'Total gifts'),
       exchangeNote: tkm('អត្រា​ប្តូរប្រាក់: 1 USD = 4000 KHR', 'Exchange rate: 1 USD = 4000 KHR'),
       expenses: tkm('ការចំណាយ', 'Expenses'),
       profitLoss: tkm('ចំណេញ/ខាត', 'Profit / loss'),
@@ -332,7 +336,7 @@ export function getEventDetailPageStrings(isKhmer: boolean) {
       totalUsd: tkm('សរុប ដុល្លារ ($)', 'Total (USD)'),
       totalKhr: tkm('សរុប រៀល (៛)', 'Total (KHR)'),
       totalAsUsd: tkm('សរុបជាដុល្លារ', 'Total in USD'),
-      exchangeNote: tkm('1 USD = 4000 KHR', '1 USD = 4000 KHR'),
+      exchangeNote: tkm('អត្រា​ប្តូរប្រាក់: 1 USD = 4000 KHR', 'Exchange rate: 1 USD = 4000 KHR'),
       errSelectGuest: tkm('សូមជ្រើសរើសភ្ញៀវជាមុនសិន', 'Select a guest first'),
       errDuplicate: tkm('ភ្ញៀវនេះបានចងដៃរួចហើយ មិនអាចបង្កើតថ្មីម្ដងទៀតបានទេ', 'This guest already has a gift; cannot add another'),
       errInvalidAmount: tkm('សូមបញ្ចូលចំនួនទឹកប្រាក់ឲ្យត្រឹមត្រូវ', 'Enter a valid amount'),
