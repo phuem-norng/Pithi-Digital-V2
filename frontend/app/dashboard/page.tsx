@@ -186,10 +186,10 @@ function DashboardPage() {
       {/* Mobile slide-in sidebar */}
       <div
         ref={mobileMenuRef}
-        className={`fixed inset-y-0 left-0 z-50 w-72 bg-white shadow-xl transition-transform duration-300 ease-in-out dark:bg-slate-900 lg:hidden ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
+        className={`fixed inset-y-0 left-0 z-50 flex h-dvh max-h-dvh w-72 flex-col bg-white shadow-xl transition-transform duration-300 ease-in-out dark:bg-slate-900 lg:hidden ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
           }`}
       >
-        <div className="flex items-center justify-end px-4 pt-4">
+        <div className="flex shrink-0 items-center justify-end px-4 pt-4 pb-2">
           <button
             type="button"
             aria-label="Close menu"
@@ -199,11 +199,13 @@ function DashboardPage() {
             <X className="h-5 w-5" />
           </button>
         </div>
-        <DashboardSharedSidebar
-          currentPath={pathname}
-          onSignOut={handleSignOut}
-          onLinkClick={() => setIsMobileMenuOpen(false)}
-        />
+        <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
+          <DashboardSharedSidebar
+            currentPath={pathname}
+            onSignOut={handleSignOut}
+            onLinkClick={() => setIsMobileMenuOpen(false)}
+          />
+        </div>
       </div>
 
       <div className="mx-auto flex w-full max-w-7xl flex-1">

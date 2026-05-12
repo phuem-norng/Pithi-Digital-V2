@@ -54,7 +54,7 @@ export function DashboardSharedSidebar({ currentPath, onSignOut, onLinkClick }: 
         </Link>
       </nav>
 
-      <div className="mt-auto px-4 pb-4">
+      <div className="mt-auto shrink-0 px-4 pb-4">
         <Button variant="outline" onClick={() => { onSignOut(); onLinkClick?.(); }} className="w-full border-gray-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800">
           {isKhmer ? 'ចាកចេញ' : 'Sign Out'}
         </Button>
