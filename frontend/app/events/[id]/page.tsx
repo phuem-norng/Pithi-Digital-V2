@@ -2164,7 +2164,10 @@ function EventDetailPage() {
     };
 
     const handleExportGuestRows = async () => {
-      const rowsToExport = filteredGuests;
+      const exportSelectedOnly = selectedGuestIds.length > 0;
+      const rowsToExport = exportSelectedOnly
+        ? normalizedGuests.filter((guest) => selectedGuestIds.includes(guest.id))
+        : filteredGuests;
 
       if (rowsToExport.length === 0) {
         setError(S.guests.exportNoData);
@@ -2196,7 +2199,8 @@ function EventDetailPage() {
         XLSX.utils.book_append_sheet(workbook, worksheet, 'Guests');
         const stamp = new Date().toISOString().slice(0, 10);
         const safeEventName = (event?.title || 'event').replace(/[\\/:*?"<>|]/g, '-');
-        XLSX.writeFile(workbook, `${safeEventName}_GuestList_${stamp}.xlsx`);
+        const selectedSuffix = exportSelectedOnly ? `_Selected_${rowsToExport.length}` : '';
+        XLSX.writeFile(workbook, `${safeEventName}_GuestList${selectedSuffix}_${stamp}.xlsx`);
 
         setSuccess(S.guests.exportOk);
       } catch {
@@ -2322,6 +2326,7 @@ function EventDetailPage() {
               <button
                 type="button"
                 onClick={handleExportGuestRows}
+                title={S.guests.exportHint}
                 className="inline-flex h-10 items-center rounded-full border border-gray-200 bg-white px-4 text-sm text-gray-700 hover:bg-gray-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
               >
                 <Download className="mr-2 h-4 w-4" />
@@ -2347,6 +2352,8 @@ function EventDetailPage() {
               </button>
             </div>
           </div>
+
+          <p className="mb-3 text-xs leading-relaxed text-gray-500 dark:text-slate-400">{S.guests.exportHint}</p>
 
           <AnimatePresence>
             {isGuestFormOpen && (

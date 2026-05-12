@@ -223,6 +223,10 @@ export function getEventDetailPageStrings(isKhmer: boolean) {
       statusPending: tkm('មិនទាន់តប', 'Pending'),
       attendeesSuffix: tkm('នាក់', 'people'),
       export: tkm('ទាញយក', 'Export'),
+      exportHint: tkm(
+        'ធីកជ្រើសភ្ញៀវមុនចុច «ទាញយក» ដើម្បីយកតែអ្នកដែលបានជ្រើស។ បើមិនធីកទេ នឹងទាញយកទាំងអស់តាមតម្រងបច្ចុប្បន្ន។',
+        'Check guests, then Export to download only the selected rows. If none are checked, the full filtered list is exported.',
+      ),
       addNew: tkm('បន្ថែមថ្មី', 'Add new'),
       addGuestTitle: tkm('បន្ថែមភ្ញៀវថ្មី', 'Add new guest'),
       formHint: tkm('បំពេញព័ត៌មានលម្អិតរបស់ភ្ញៀវនៅខាងក្រោម', 'Enter guest details below'),
