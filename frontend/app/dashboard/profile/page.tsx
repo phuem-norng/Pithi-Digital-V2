@@ -372,16 +372,6 @@ function DashboardProfilePage() {
 
               <div className="flex items-center gap-2">
                 <DashboardLanguageThemeControls />
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handleSignOut}
-                  className="h-9 shrink-0 gap-1.5 border-gray-200 px-2.5 text-gray-700 hover:bg-gray-50 lg:hidden dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-                  aria-label={isKhmer ? 'ចាកចេញ' : 'Sign out'}
-                >
-                  <LogOut className="h-4 w-4 shrink-0" />
-                  <span className="font-khmer-body text-xs sm:text-sm">{isKhmer ? 'ចាកចេញ' : 'Sign Out'}</span>
-                </Button>
                 <div className="hidden sm:flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1.5">
                   {user?.avatarUrl ? (
                     <img
@@ -676,6 +666,26 @@ function DashboardProfilePage() {
                     {isChangingPassword ? (isKhmer ? 'កំពុងប្តូរពាក្យសម្ងាត់...' : 'Changing password...') : (isKhmer ? 'ប្តូរពាក្យសម្ងាត់' : 'Change Password')}
                   </Button>
                 </form>
+              </article>
+            </section>
+
+            <section className="mt-6" aria-label={isKhmer ? 'ចាកចេញពីគណនី' : 'Sign out of account'}>
+              <article className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-6">
+                <h2 className="mb-2 font-khmer-heading text-lg text-gray-900 dark:text-slate-100">
+                  {isKhmer ? 'ចាកចេញពីគណនី' : 'Sign out of account'}
+                </h2>
+                <p className="mb-4 text-sm text-gray-500 dark:text-slate-400 font-khmer-body">
+                  {isKhmer ? 'ចាកចេញពីឧបករណ៍នេះ។ អ្នកអាចចូលម្តងទៀតពេលណាក៏បាន។' : 'Sign out on this device. You can sign in again anytime.'}
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleSignOut}
+                  className="w-full gap-2 border-gray-200 text-gray-700 hover:bg-gray-50 sm:w-auto dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                >
+                  <LogOut className="h-4 w-4 shrink-0" />
+                  {isKhmer ? 'ចាកចេញ' : 'Sign Out'}
+                </Button>
               </article>
             </section>
           </main>
