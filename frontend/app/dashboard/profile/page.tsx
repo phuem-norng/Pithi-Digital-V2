@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { BarChart3, CalendarDays, Eye, EyeOff, Home, Mail, Menu, Phone, Plus, Shield, Upload, User, Users, X } from 'lucide-react';
+import { BarChart3, CalendarDays, Eye, EyeOff, Home, LogOut, Mail, Menu, Phone, Plus, Shield, Upload, User, Users, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { MessageCard } from '@/components/ui/message-card';
@@ -372,6 +372,16 @@ function DashboardProfilePage() {
 
               <div className="flex items-center gap-2">
                 <DashboardLanguageThemeControls />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleSignOut}
+                  className="h-9 shrink-0 gap-1.5 border-gray-200 px-2.5 text-gray-700 hover:bg-gray-50 lg:hidden dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                  aria-label={isKhmer ? 'ចាកចេញ' : 'Sign out'}
+                >
+                  <LogOut className="h-4 w-4 shrink-0" />
+                  <span className="font-khmer-body text-xs sm:text-sm">{isKhmer ? 'ចាកចេញ' : 'Sign Out'}</span>
+                </Button>
                 <div className="hidden sm:flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1.5">
                   {user?.avatarUrl ? (
                     <img
