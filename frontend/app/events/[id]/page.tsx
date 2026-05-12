@@ -90,6 +90,7 @@ import {
   getGuestTagLabel,
 } from '@/lib/event-detail-page-i18n';
 import { formatUsdCurrency, USD_KHR_EXCHANGE_RATE } from '@/lib/gift-exchange';
+import { getHonoreeNamesForExport } from '@/lib/wedding-honoree-names';
 
 type TabId =
   | 'general'
@@ -2226,34 +2227,40 @@ function EventDetailPage() {
       setSuccess(S.guests.preparingPdf);
 
       const meta = (event?.metadata || {}) as Record<string, unknown>;
-      const metaGroom = typeof meta.groomName === 'string' ? meta.groomName.trim() : '';
-      const metaBride = typeof meta.brideName === 'string' ? meta.brideName.trim() : '';
       const metaHost = typeof meta.hostName === 'string' ? meta.hostName.trim() : '';
-      const displayGroom = metaGroom || groomName;
-      const displayBrideRaw = metaBride || (brideName === 'Bride Name' ? '' : brideName);
-      const displayBride = displayBrideRaw === 'Bride Name' ? '' : displayBrideRaw;
+      const { groom: honGroom, bride: honBride } = getHonoreeNamesForExport(
+        event?.title,
+        meta,
+        weddingPrefix,
+      );
       const isWeddingType = event?.type === 'WEDDING';
+      const titleLooksWedding = /មង្គលការ|រៀបការ|Wedding/i.test(event?.title || '');
       const showCouple =
-        isWeddingType || Boolean(metaGroom) || Boolean(metaBride) || (Boolean(displayGroom) && Boolean(displayBride));
+        isWeddingType || titleLooksWedding || Boolean(honGroom) || Boolean(honBride) || Boolean(metaHost);
 
       const headerLines: { label: string; value: string }[] = [];
-      headerLines.push({ label: S.guests.pdfEvent, value: event?.title || '—' });
+      headerLines.push({ label: S.guests.pdfEvent, value: event?.title || '-' });
 
-      if (showCouple && (displayGroom || displayBride)) {
-        headerLines.push({ label: S.guests.pdfGroom, value: displayGroom || '—' });
-        headerLines.push({ label: S.guests.pdfBride, value: displayBride || '—' });
+      if (showCouple && (honGroom || honBride)) {
+        headerLines.push({ label: S.guests.pdfGroom, value: honGroom || '-' });
+        headerLines.push({ label: S.guests.pdfBride, value: honBride || '-' });
       } else if (metaHost) {
         headerLines.push({ label: S.guests.pdfHost, value: metaHost });
       }
 
-      const dateLine = event?.date
-        ? `${S.guests.pdfDate}: ${new Date(event.date).toLocaleString(isKhmer ? 'km-KH' : 'en-US', {
+      let dateLine: string | undefined;
+      if (event?.date) {
+        const d = new Date(event.date);
+        if (!Number.isNaN(d.getTime())) {
+          dateLine = `${S.guests.pdfDate}: ${d.toLocaleString(isKhmer ? 'km-KH' : 'en-US', {
             dateStyle: 'long',
             timeStyle: 'short',
-          })}`
-        : undefined;
+          })}`;
+        }
+      }
 
-      const loc = (event?.address || event?.location || '').trim();
+      const venueMeta = typeof meta.venue === 'string' ? meta.venue.trim() : '';
+      const loc = [event?.address, event?.location, venueMeta].map((s) => (typeof s === 'string' ? s.trim() : '')).find(Boolean) || '';
       const locationLine = loc ? `${S.guests.pdfLocation}: ${loc}` : undefined;
 
       const tableRows = rowsToExport.map((guest) => ({

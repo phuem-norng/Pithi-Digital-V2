@@ -61,57 +61,60 @@ async function embedKhmerFont(doc: jsPDF): Promise<void> {
   doc.setFont(FONT_NAME, 'normal');
 }
 
+function drawSingleLine(
+  doc: jsPDF,
+  text: string,
+  x: number,
+  y: number,
+  maxWidthMm: number,
+  fontSize: number,
+): number {
+  const safe = String(text ?? '').trim() || '-';
+  doc.setFont(FONT_NAME, 'normal');
+  let size = fontSize;
+  doc.setFontSize(size);
+  while (size > 6 && doc.getTextWidth(safe) > maxWidthMm) {
+    size -= 0.5;
+    doc.setFontSize(size);
+  }
+  doc.text(safe, x, y);
+  return y + Math.max(4.8, size * 0.56);
+}
+
 /**
  * Builds a printable guest list PDF with embedded Khmer-capable font.
  */
 export async function downloadGuestListPdf(options: GuestListPdfOptions): Promise<void> {
-  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
   await embedKhmerFont(doc);
 
   const pageW = doc.internal.pageSize.getWidth();
-  const margin = 14;
+  const margin = 12;
   let y = margin;
+  const textMax = pageW - margin * 2;
 
-  doc.setFont(FONT_NAME, 'normal');
-  doc.setFontSize(16);
   doc.setTextColor(30, 30, 30);
-  doc.text(options.docTitle, margin, y);
-  y += 9;
+  y = drawSingleLine(doc, options.docTitle, margin, y + 4, textMax, 15);
 
-  doc.setFontSize(11);
-  doc.setTextColor(55, 55, 55);
+  doc.setTextColor(35, 35, 35);
   for (const line of options.headerLines) {
-    const label = `${line.label}:`;
-    doc.setFont(FONT_NAME, 'normal');
-    doc.setFontSize(10);
-    doc.setTextColor(90, 90, 90);
-    doc.text(label, margin, y);
-    const labelW = doc.getTextWidth(`${label} `);
-    doc.setTextColor(25, 25, 25);
-    const wrapped = doc.splitTextToSize(line.value || '—', pageW - margin * 2 - labelW);
-    doc.text(wrapped, margin + labelW, y);
-    y += Math.max(6, wrapped.length * 5);
+    const combined = `${line.label}: ${(line.value ?? '').trim() || '-'}`;
+    y = drawSingleLine(doc, combined, margin, y + 3, textMax, 10);
   }
 
   if (options.dateLine) {
-    doc.setFontSize(9.5);
-    doc.setTextColor(70, 70, 70);
-    doc.text(options.dateLine, margin, y);
-    y += 5.5;
+    doc.setTextColor(55, 55, 55);
+    y = drawSingleLine(doc, options.dateLine, margin, y + 3, textMax, 9.5);
   }
   if (options.locationLine) {
-    doc.setFontSize(9.5);
-    doc.setTextColor(70, 70, 70);
-    const loc = doc.splitTextToSize(options.locationLine, pageW - margin * 2);
-    doc.text(loc, margin, y);
-    y += loc.length * 5;
+    doc.setTextColor(55, 55, 55);
+    y = drawSingleLine(doc, options.locationLine, margin, y + 3, textMax, 9.5);
   }
 
+  y += 2;
+  doc.setTextColor(90, 90, 90);
+  y = drawSingleLine(doc, options.generatedLine, margin, y + 3, textMax, 8.5);
   y += 4;
-  doc.setFontSize(8);
-  doc.setTextColor(120, 120, 120);
-  doc.text(options.generatedLine, margin, y);
-  y += 8;
 
   const head = [
     [
@@ -141,11 +144,13 @@ export async function downloadGuestListPdf(options: GuestListPdfOptions): Promis
     body,
     styles: {
       font: FONT_NAME,
-      fontSize: 8,
-      cellPadding: 1.8,
+      fontSize: 7.5,
+      cellPadding: 1.5,
       textColor: [35, 35, 35],
       lineColor: [220, 220, 220],
       lineWidth: 0.1,
+      overflow: 'linebreak',
+      valign: 'top',
     },
     headStyles: {
       font: FONT_NAME,
@@ -153,21 +158,23 @@ export async function downloadGuestListPdf(options: GuestListPdfOptions): Promis
       textColor: 255,
       fontStyle: 'normal',
       halign: 'left',
+      fontSize: 8,
     },
     alternateRowStyles: { fillColor: [252, 252, 252] },
     columnStyles: {
-      0: { cellWidth: 28 },
+      0: { cellWidth: 32 },
       1: { cellWidth: 24 },
-      2: { cellWidth: 24 },
-      3: { cellWidth: 24 },
-      4: { cellWidth: 32 },
-      5: { cellWidth: 32 },
-      6: { cellWidth: 26 },
+      2: { cellWidth: 28 },
+      3: { cellWidth: 28 },
+      4: { cellWidth: 48 },
+      5: { cellWidth: 62 },
+      6: { cellWidth: 38 },
     },
     margin: { left: margin, right: margin },
     tableWidth: pageW - margin * 2,
     showHead: 'everyPage',
-    horizontalPageBreak: true,
+    pageBreak: 'auto',
+    rowPageBreak: 'avoid',
   });
 
   const stamp = new Date().toISOString().slice(0, 10);
