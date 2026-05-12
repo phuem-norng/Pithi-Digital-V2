@@ -90,7 +90,6 @@ import {
   getGuestTagLabel,
 } from '@/lib/event-detail-page-i18n';
 import { formatUsdCurrency, USD_KHR_EXCHANGE_RATE } from '@/lib/gift-exchange';
-import { getHonoreeNamesForExport } from '@/lib/wedding-honoree-names';
 
 type TabId =
   | 'general'
@@ -269,7 +268,6 @@ function EventDetailPage() {
   const [guestGroupFilter, setGuestGroupFilter] = useState('ALL');
   const [guestTagFilter, setGuestTagFilter] = useState('ALL');
   const [selectedGuestIds, setSelectedGuestIds] = useState<string[]>([]);
-  const [guestExportKind, setGuestExportKind] = useState<'excel' | 'pdf'>('excel');
   const [isGuestFormOpen, setIsGuestFormOpen] = useState(false);
   const [shareGuestId, setShareGuestId] = useState<string | null>(null);
   const [shareLink, setShareLink] = useState('');
@@ -2211,105 +2209,6 @@ function EventDetailPage() {
       }
     };
 
-    const handleExportGuestPdf = async () => {
-      const exportSelectedOnly = selectedGuestIds.length > 0;
-      const rowsToExport = exportSelectedOnly
-        ? normalizedGuests.filter((guest) => selectedGuestIds.includes(guest.id))
-        : filteredGuests;
-
-      if (rowsToExport.length === 0) {
-        setError(S.guests.exportNoData);
-        setSuccess('');
-        return;
-      }
-
-      setError('');
-      setSuccess(S.guests.preparingPdf);
-
-      const meta = (event?.metadata || {}) as Record<string, unknown>;
-      const metaHost = typeof meta.hostName === 'string' ? meta.hostName.trim() : '';
-      const { groom: honGroom, bride: honBride } = getHonoreeNamesForExport(
-        event?.title,
-        meta,
-        weddingPrefix,
-      );
-      const isWeddingType = event?.type === 'WEDDING';
-      const titleLooksWedding = /មង្គលការ|រៀបការ|Wedding/i.test(event?.title || '');
-      const showCouple =
-        isWeddingType || titleLooksWedding || Boolean(honGroom) || Boolean(honBride) || Boolean(metaHost);
-
-      const headerLines: { label: string; value: string }[] = [];
-      headerLines.push({ label: S.guests.pdfEvent, value: event?.title || '-' });
-
-      if (showCouple && (honGroom || honBride)) {
-        headerLines.push({ label: S.guests.pdfGroom, value: honGroom || '-' });
-        headerLines.push({ label: S.guests.pdfBride, value: honBride || '-' });
-      } else if (metaHost) {
-        headerLines.push({ label: S.guests.pdfHost, value: metaHost });
-      }
-
-      let dateLine: string | undefined;
-      if (event?.date) {
-        const d = new Date(event.date);
-        if (!Number.isNaN(d.getTime())) {
-          dateLine = `${S.guests.pdfDate}: ${d.toLocaleString(isKhmer ? 'km-KH' : 'en-US', {
-            dateStyle: 'long',
-            timeStyle: 'short',
-          })}`;
-        }
-      }
-
-      const venueMeta = typeof meta.venue === 'string' ? meta.venue.trim() : '';
-      const loc = [event?.address, event?.location, venueMeta].map((s) => (typeof s === 'string' ? s.trim() : '')).find(Boolean) || '';
-      const locationLine = loc ? `${S.guests.pdfLocation}: ${loc}` : undefined;
-
-      const tableRows = rowsToExport.map((guest) => ({
-        name: guest.name,
-        phone: guest.phone || '',
-        group: getGroupLabel(guest.group || 'GROOM_SIDE'),
-        tag: getTagLabel(guest.tag || 'OTHERS'),
-        status: getStatusMeta(guest).label,
-        greeting: (guest.greetingMessage || '').replace(/\s+/g, ' ').trim() || '—',
-        note: (guest.note || '').replace(/\s+/g, ' ').trim() || '—',
-      }));
-
-      try {
-        const { downloadGuestListPdf } = await import('@/lib/guest-list-pdf');
-        const safeEventName = (event?.title || 'event').replace(/[\\/:*?"<>|]/g, '-');
-        const selectedSuffix = exportSelectedOnly ? `_Selected_${rowsToExport.length}` : '';
-        await downloadGuestListPdf({
-          filenameBase: `${safeEventName}_GuestList${selectedSuffix}`,
-          docTitle: S.guests.pdfDocTitle,
-          headerLines,
-          dateLine,
-          locationLine,
-          generatedLine: `${S.guests.pdfGenerated}: ${new Date().toLocaleString(isKhmer ? 'km-KH' : 'en-US')}`,
-          columns: {
-            name: S.guests.thName,
-            phone: S.guests.thPhone,
-            group: S.guests.thGroup,
-            tag: S.guests.thTag,
-            status: S.guests.thStatus,
-            greeting: S.guests.thGreeting,
-            note: S.guests.thNote,
-          },
-          rows: tableRows,
-        });
-        setSuccess(S.guests.pdfExportOk);
-      } catch {
-        setSuccess('');
-        setError(S.guests.pdfExportFail);
-      }
-    };
-
-    const handleGuestExport = () => {
-      if (guestExportKind === 'pdf') {
-        void handleExportGuestPdf();
-      } else {
-        void handleExportGuestRows();
-      }
-    };
-
     const handleCopySelected = async () => {
       if (typeof window === 'undefined') {
         return;
@@ -2424,19 +2323,9 @@ function EventDetailPage() {
                 <Copy className="h-4 w-4" />
               </button>
 
-              <select
-                value={guestExportKind}
-                onChange={(e) => setGuestExportKind(e.target.value as 'excel' | 'pdf')}
-                aria-label={S.guests.exportFormatLabel}
-                className="h-10 min-w-[8.5rem] rounded-lg border border-gray-200 bg-white px-2 text-sm text-gray-800 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-              >
-                <option value="excel">{S.guests.exportAsExcel}</option>
-                <option value="pdf">{S.guests.exportAsPdf}</option>
-              </select>
-
               <button
                 type="button"
-                onClick={handleGuestExport}
+                onClick={() => void handleExportGuestRows()}
                 title={S.guests.exportHint}
                 className="inline-flex h-10 items-center rounded-full border border-gray-200 bg-white px-4 text-sm text-gray-700 hover:bg-gray-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
               >
