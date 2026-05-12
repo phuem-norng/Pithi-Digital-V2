@@ -1835,7 +1835,7 @@ function EventDetailPage() {
               <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/90 text-sky-600 shadow-sm ring-1 ring-sky-100 dark:bg-slate-800 dark:text-sky-400 dark:ring-slate-600">
                 <Users className="h-5 w-5" />
               </span>
-              <p className="shrink-0 text-right font-khmer-heading text-3xl font-semibold tabular-nums text-sky-800 dark:text-sky-100">
+              <p className="shrink-0 text-right font-tabular-figures text-3xl font-semibold tabular-nums tracking-tight text-sky-800 dark:text-sky-100">
                 {totalGuests}
               </p>
             </div>
@@ -1847,7 +1847,7 @@ function EventDetailPage() {
               <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/90 text-emerald-600 shadow-sm ring-1 ring-emerald-100 dark:bg-slate-800 dark:text-emerald-400 dark:ring-slate-600">
                 <CheckCircle2 className="h-5 w-5" />
               </span>
-              <p className="shrink-0 text-right font-khmer-heading text-3xl font-semibold tabular-nums text-emerald-800 dark:text-emerald-100">
+              <p className="shrink-0 text-right font-tabular-figures text-3xl font-semibold tabular-nums tracking-tight text-emerald-800 dark:text-emerald-100">
                 {acceptedGuests}
               </p>
             </div>
@@ -1859,7 +1859,7 @@ function EventDetailPage() {
               <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/90 text-violet-600 shadow-sm ring-1 ring-violet-100 dark:bg-slate-800 dark:text-violet-400 dark:ring-slate-600">
                 <TrendingUp className="h-5 w-5" />
               </span>
-              <p className="shrink-0 text-right font-khmer-heading text-3xl font-semibold tabular-nums text-violet-800 dark:text-violet-100">
+              <p className="shrink-0 text-right font-tabular-figures text-3xl font-semibold tabular-nums tracking-tight text-violet-800 dark:text-violet-100">
                 {formatUsdCurrency(totalGiftAsUsd)}
               </p>
             </div>
@@ -1873,7 +1873,7 @@ function EventDetailPage() {
               <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/90 text-rose-600 shadow-sm ring-1 ring-rose-100 dark:bg-slate-800 dark:text-rose-400 dark:ring-slate-600">
                 <DollarSign className="h-5 w-5" />
               </span>
-              <p className="shrink-0 text-right font-khmer-heading text-3xl font-semibold tabular-nums text-rose-800 dark:text-rose-100">
+              <p className="shrink-0 text-right font-tabular-figures text-3xl font-semibold tabular-nums tracking-tight text-rose-800 dark:text-rose-100">
                 {formatUsdCurrency(totalExpenseActualUsd)}
               </p>
             </div>
@@ -1882,7 +1882,7 @@ function EventDetailPage() {
               <div className="h-1.5 w-full overflow-hidden rounded-full bg-rose-100/90 dark:bg-rose-950/50">
                 <div className="h-full rounded-full bg-rose-400 dark:bg-rose-500" style={{ width: `${Math.min(100, expensePercent)}%` }} />
               </div>
-              <p className="text-[11px] font-medium tabular-nums text-rose-700 dark:text-rose-300">{expensePercent}%</p>
+              <p className="font-tabular-figures text-sm font-medium tabular-nums tracking-tight text-rose-700 dark:text-rose-300">{expensePercent}%</p>
             </div>
           </div>
 
@@ -1891,7 +1891,7 @@ function EventDetailPage() {
               <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/90 text-teal-600 shadow-sm ring-1 ring-teal-100 dark:bg-slate-800 dark:text-teal-400 dark:ring-slate-600">
                 {profitLossUsd >= 0 ? <TrendingUp className="h-5 w-5" /> : <TrendingDown className="h-5 w-5" />}
               </span>
-              <p className="shrink-0 text-right font-khmer-heading text-3xl font-semibold tabular-nums text-teal-800 dark:text-teal-100">
+              <p className="shrink-0 text-right font-tabular-figures text-3xl font-semibold tabular-nums tracking-tight text-teal-800 dark:text-teal-100">
                 {formatUsdCurrency(profitLossUsd)}
               </p>
             </div>
@@ -1917,19 +1917,19 @@ function EventDetailPage() {
                   <span className="flex items-center gap-2">
                     <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />{S.general.legendConfirmed}
                   </span>
-                  <span>{acceptRate}%</span>
+                  <span className="font-tabular-figures tabular-nums text-slate-800 dark:text-slate-100">{acceptRate}%</span>
                 </div>
                 <div className="flex items-center justify-between gap-4">
                   <span className="flex items-center gap-2">
                     <span className="h-2.5 w-2.5 rounded-full bg-amber-400" />{S.general.legendPending}
                   </span>
-                  <span>{pendingRate}%</span>
+                  <span className="font-tabular-figures tabular-nums text-slate-800 dark:text-slate-100">{pendingRate}%</span>
                 </div>
                 <div className="flex items-center justify-between gap-4">
                   <span className="flex items-center gap-2">
                     <span className="h-2.5 w-2.5 rounded-full bg-rose-400" />{S.general.legendDeclined}
                   </span>
-                  <span>{declineRate}%</span>
+                  <span className="font-tabular-figures tabular-nums text-slate-800 dark:text-slate-100">{declineRate}%</span>
                 </div>
               </div>
             </div>
@@ -1950,7 +1950,7 @@ function EventDetailPage() {
                 <div key={item.label}>
                   <div className="mb-2 flex items-center justify-between text-sm text-slate-600 dark:text-slate-300">
                     <span>{item.label}</span>
-                    <span>${formatUsd(item.value)}</span>
+                    <span className="font-tabular-figures tabular-nums text-slate-800 dark:text-slate-100">${formatUsd(item.value)}</span>
                   </div>
                   <div className="h-2 w-full rounded-full bg-slate-100 dark:bg-slate-700">
                     <div
@@ -1972,15 +1972,15 @@ function EventDetailPage() {
           <div className="mt-5 space-y-3 text-sm text-slate-600 dark:text-slate-300">
             <div className="flex items-center justify-between border-b border-dashed border-slate-200 pb-2 dark:border-slate-700">
               <span>{S.general.financeGifts}</span>
-              <span>${formatUsd(totalGiftAsUsd)}</span>
+              <span className="font-tabular-figures tabular-nums text-slate-800 dark:text-slate-100">${formatUsd(totalGiftAsUsd)}</span>
             </div>
             <div className="flex items-center justify-between border-b border-dashed border-slate-200 pb-2 dark:border-slate-700">
               <span>{S.general.financeExpensesActual}</span>
-              <span>${formatUsd(totalExpenseActualUsd)}</span>
+              <span className="font-tabular-figures tabular-nums text-slate-800 dark:text-slate-100">${formatUsd(totalExpenseActualUsd)}</span>
             </div>
             <div className="flex items-center justify-between">
               <span>{S.general.financeProfit}</span>
-              <span>${formatUsd(profitLossUsd)}</span>
+              <span className="font-tabular-figures tabular-nums text-slate-800 dark:text-slate-100">${formatUsd(profitLossUsd)}</span>
             </div>
           </div>
         </section>
@@ -1993,19 +1993,19 @@ function EventDetailPage() {
           <div className="mt-5 space-y-3 text-sm text-slate-600 dark:text-slate-300">
             <div className="flex items-center justify-between border-b border-dashed border-slate-200 pb-2 dark:border-slate-700">
               <span>{S.general.statConfirmed}</span>
-              <span>{acceptedGuests}</span>
+              <span className="font-tabular-figures tabular-nums text-slate-800 dark:text-slate-100">{acceptedGuests}</span>
             </div>
             <div className="flex items-center justify-between border-b border-dashed border-slate-200 pb-2 dark:border-slate-700">
               <span>{S.general.statPending}</span>
-              <span>{pendingGuests}</span>
+              <span className="font-tabular-figures tabular-nums text-slate-800 dark:text-slate-100">{pendingGuests}</span>
             </div>
             <div className="flex items-center justify-between border-b border-dashed border-slate-200 pb-2 dark:border-slate-700">
               <span>{S.general.statDeclined}</span>
-              <span>{declinedGuests}</span>
+              <span className="font-tabular-figures tabular-nums text-slate-800 dark:text-slate-100">{declinedGuests}</span>
             </div>
             <div className="flex items-center justify-between">
               <span>{S.general.statGifted}</span>
-              <span>{giftRows.length}</span>
+              <span className="font-tabular-figures tabular-nums text-slate-800 dark:text-slate-100">{giftRows.length}</span>
             </div>
           </div>
         </section>
@@ -2020,7 +2020,7 @@ function EventDetailPage() {
               <Mail className="h-5 w-5 text-amber-700 dark:text-slate-300" />
             </div>
             <p className="mt-4 text-sm text-amber-700 dark:text-slate-300">{S.general.totalGiftsLine}</p>
-            <p className="mt-2 text-2xl font-semibold text-amber-900 dark:text-slate-100">
+            <p className="mt-2 font-tabular-figures text-2xl font-semibold tabular-nums tracking-tight text-amber-900 dark:text-slate-100">
               {giftRows.length} {S.general.peopleSuffix}
             </p>
           </div>
@@ -2069,7 +2069,7 @@ function EventDetailPage() {
                     { label: S.general.second, value: String(seconds).padStart(2, '0') },
                   ].map((item) => (
                     <div key={item.label} className="rounded-2xl border border-slate-100 bg-slate-50 p-3 text-center dark:border-slate-700 dark:bg-slate-800">
-                      <p className="text-xl font-semibold text-slate-900 sm:text-2xl dark:text-slate-100">{item.value}</p>
+                      <p className="font-tabular-figures text-xl font-semibold tabular-nums tracking-tight text-slate-900 sm:text-2xl dark:text-slate-100">{item.value}</p>
                       <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{item.label}</p>
                     </div>
                   ))}
@@ -3286,7 +3286,7 @@ function EventDetailPage() {
               <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/90 text-sky-600 shadow-sm ring-1 ring-sky-100 dark:bg-slate-800 dark:text-sky-400 dark:ring-slate-600">
                 <Users className="h-5 w-5" />
               </span>
-              <p className="shrink-0 text-right font-khmer-heading text-3xl font-semibold tabular-nums text-sky-800 dark:text-sky-100">
+              <p className="shrink-0 text-right font-tabular-figures text-3xl font-semibold tabular-nums tracking-tight text-sky-800 dark:text-sky-100">
                 {formatAmount(receivedGiftCount)}
               </p>
             </div>
@@ -3298,7 +3298,7 @@ function EventDetailPage() {
               <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/90 text-emerald-600 shadow-sm ring-1 ring-emerald-100 dark:bg-slate-800 dark:text-emerald-400 dark:ring-slate-600">
                 <DollarSign className="h-5 w-5" />
               </span>
-              <p className="shrink-0 text-right font-khmer-heading text-3xl font-semibold tabular-nums text-emerald-800 dark:text-emerald-100">
+              <p className="shrink-0 text-right font-tabular-figures text-3xl font-semibold tabular-nums tracking-tight text-emerald-800 dark:text-emerald-100">
                 {formatUsdCurrency(totalUsd)}
               </p>
             </div>
@@ -3310,7 +3310,7 @@ function EventDetailPage() {
               <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/90 font-semibold text-violet-600 shadow-sm ring-1 ring-violet-100 dark:bg-slate-800 dark:text-violet-400 dark:ring-slate-600">
                 ៛
               </span>
-              <p className="shrink-0 text-right font-khmer-heading text-3xl font-semibold tabular-nums text-violet-800 dark:text-violet-100">
+              <p className="shrink-0 text-right font-tabular-figures text-3xl font-semibold tabular-nums tracking-tight text-violet-800 dark:text-violet-100">
                 ៛{formatAmount(totalKhr)}
               </p>
             </div>
@@ -3322,7 +3322,7 @@ function EventDetailPage() {
               <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/90 text-rose-600 shadow-sm ring-1 ring-rose-100 dark:bg-slate-800 dark:text-rose-400 dark:ring-slate-600">
                 <TrendingUp className="h-5 w-5" />
               </span>
-              <p className="shrink-0 text-right font-khmer-heading text-3xl font-semibold tabular-nums text-rose-800 dark:text-rose-100">
+              <p className="shrink-0 text-right font-tabular-figures text-3xl font-semibold tabular-nums tracking-tight text-rose-800 dark:text-rose-100">
                 {formatUsdCurrency(totalAsUsd)}
               </p>
             </div>
