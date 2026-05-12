@@ -1,6 +1,8 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
+import { createKhmerSafeTableOverflow } from '@/lib/khmer-pdf-cell-wrap';
+
 const FONT_FILE = 'NotoSansKhmer-Regular.ttf';
 const FONT_NAME = 'NotoSansKhmer';
 
@@ -87,6 +89,7 @@ function drawSingleLine(
 export async function downloadGuestListPdf(options: GuestListPdfOptions): Promise<void> {
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
   await embedKhmerFont(doc);
+  const khmerCellOverflow = createKhmerSafeTableOverflow(doc);
 
   const pageW = doc.internal.pageSize.getWidth();
   const margin = 12;
@@ -149,7 +152,7 @@ export async function downloadGuestListPdf(options: GuestListPdfOptions): Promis
       textColor: [35, 35, 35],
       lineColor: [220, 220, 220],
       lineWidth: 0.1,
-      overflow: 'linebreak',
+      overflow: khmerCellOverflow,
       valign: 'top',
     },
     headStyles: {
